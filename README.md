@@ -33,6 +33,8 @@ A 100–470 µF capacitor across the IR breakout's V+ and GND helps with the
 LED current pulses. The battery is read on GPIO34 through the board's
 own 100K/100K divider.
 
+<img src="https://github.com/Moaske/Freenove-MultiRemote/blob/main/docs/freenove_ir_remote_wiring.png"></img>
+
 ## SD card
 
 Put the Flipper Zero `.ir` files in a folder called `remote`:
