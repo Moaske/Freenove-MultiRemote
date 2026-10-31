@@ -25,14 +25,26 @@ protocol: NECext
 address: B8 00 00 00
 command: 9C 63 00 00
 # 
-name: video
+name: Video
 type: parsed
 protocol: NECext
 address: B8 00 00 00
 command: 96 69 00 00
 # 
-name: cd
+name: CD
 type: parsed
 protocol: NECext
 address: B8 00 00 00
 command: 92 6D 00 00
+# 
+name: Phono
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 90 6F 00 00
+# 
+name: AUX
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 93 6C 00 00
