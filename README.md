@@ -5,6 +5,8 @@ A finger-friendly touch remote built on the **Freenove ESP32 Display 2.8"
 captured with a Flipper Zero, and (next step) the media player on a
 Windows 11 PC over Bluetooth.
 
+<img src="https://github.com/Moaske/Freenove-MultiRemote/blob/main/docs/remote_main.png"></img>&nbsp;&nbsp;&nbsp;<img src="https://github.com/Moaske/Freenove-MultiRemote/blob/main/docs/remote_settings.png"></img>
+
 ## Status
 
 | Part | State |
