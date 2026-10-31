@@ -1,0 +1,38 @@
+Filetype: IR signals file
+Version: 1
+# 
+name: Power
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 9D 62 00 00
+# 
+name: Vol_up
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 9B 64 00 00
+# 
+name: Vol_down
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 9A 65 00 00
+# 
+name: Mute
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 9C 63 00 00
+# 
+name: video
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 96 69 00 00
+# 
+name: cd
+type: parsed
+protocol: NECext
+address: B8 00 00 00
+command: 92 6D 00 00
