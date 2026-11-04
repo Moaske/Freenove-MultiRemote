@@ -1,4 +1,4 @@
-name: Build firmware
+name: Build firmware and tray app
 
 on:
   push:
@@ -62,3 +62,31 @@ jobs:
         with:
           name: freenove-multiremote-firmware
           path: out/
+
+  tray:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build tray app
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! dotnet publish tray/MultiRemoteTray.csproj -c Release -r win-x64 \
+               --self-contained true -p:PublishSingleFile=true \
+               -p:IncludeNativeLibrariesForSelfExtract=true \
+               -p:EnableCompressionInSingleFile=true -o out 2>&1 | tee build.log; then
+            MSG=$(grep -E "error" build.log | sort -u | head -30 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')
+            echo "::error title=Tray app build failed::$MSG"
+            exit 1
+          fi
+
+      - name: Upload tray app
+        uses: actions/upload-artifact@v4
+        with:
+          name: multiremote-tray-app
+          path: out/MultiRemoteTray.exe

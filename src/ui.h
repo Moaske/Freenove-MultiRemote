@@ -2,7 +2,7 @@
 #pragma once
 #include <Arduino.h>
 
-enum class Screen : uint8_t { Main, Settings };
+enum class Screen : uint8_t { Main, Settings, Pairing };
 
 // Everything on screen that reacts to a touch.
 enum class Hit : uint8_t {
@@ -11,6 +11,8 @@ enum class Hit : uint8_t {
     Gear, MediaPrev, MediaPlay, MediaNext, VolDown, VolUp, Mute, Tab, Slot,
     // Settings screen
     Back, Pairing, LoadIr, Theme, Brightness, DimAfter, SleepAfter,
+    // Bluetooth screen
+    Forget,
 };
 
 struct Target {
@@ -33,4 +35,5 @@ namespace UI {
 
     Target hitTest(int16_t x, int16_t y);
     void message(const char* text);  // a short note over the panel area
+    void onBle(uint8_t changed);     // redraw what a Bluetooth change touched
 }

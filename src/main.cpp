@@ -3,7 +3,8 @@
 // A touch remote on the Freenove ESP32 Display 2.8" (FNK0114B_2P8):
 //  - IR to the amplifier, CD and MiniDisc, from Flipper Zero .ir files in
 //    /remote on the SD card (amp.ir, cd.ir, md.ir)
-//  - next step: Bluetooth to the Windows PC (media keys, track info, cover)
+//  - Bluetooth LE to the Windows PC: media keys, and track info plus cover
+//    from the tray app (tray/)
 //
 // Hardware: Adafruit 5639 IR emitter IN on GPIO27, battery through the
 // Adafruit bq25185 charger on BAT+. See README.md.
@@ -19,62 +20,75 @@
 #include "touch.h"
 #include "ir_codes.h"
 #include "ui.h"
+#include "ble_link.h"
 
 TFT_eSPI tft;
 
 namespace {
 
 // ---- Backlight and sleep --------------------------------------------------
+//
+// Active -> Dimmed (backlight low) -> Standby (screen off, Bluetooth still
+// connected, so the PC link and track info are there the moment it wakes)
+// -> after DEEP_AFTER_MS in standby: deep sleep, which drops Bluetooth;
+// a touch or BOOT restarts the remote and the PC reconnects in a few seconds.
 
-// Woke: just back from sleep, screen lit, and the touch that woke it must
-// not press a button.
-enum class Power : uint8_t { Active, Dimmed, Woke };
+enum class Power : uint8_t { Active, Dimmed, Standby };
 Power    s_power = Power::Active;
 uint32_t s_lastActivity = 0;
-const uint8_t DIM_PWM = 12;
+uint32_t s_standbySince = 0;
+const uint8_t  DIM_PWM = 12;
+const uint32_t DEEP_AFTER_MS = 30UL * 60 * 1000;
 
 void backlight(uint8_t duty) { ledcWrite(BL_CHANNEL, duty); }
 
-void activity() {
-    s_lastActivity = millis();
-    if (s_power != Power::Active) {
-        s_power = Power::Active;
-        backlight(Store::brightnessPwm());
+void wakeScreen() {
+    if (s_power == Power::Standby) {
+        tft.writecommand(0x11);   // ST7789 SLPOUT
+        delay(120);
+        UI::drawScreen();         // nothing was drawn while the panel slept
+        Serial.println("[power] awake");
     }
+    s_power = Power::Active;
+    backlight(Store::brightnessPwm());
 }
 
-// Screen off and the CPU in light sleep until the screen or BOOT is touched.
-void sleepNow() {
-    Serial.println("[power] sleep");
+void activity() {
+    s_lastActivity = millis();
+    if (s_power != Power::Active) wakeScreen();
+}
+
+void standby() {
+    Serial.println("[power] standby");
+    backlight(0);
+    tft.writecommand(0x10);       // ST7789 SLPIN
+    s_power = Power::Standby;
+    s_standbySince = millis();
+}
+
+void deepSleep() {
+    Serial.println("[power] deep sleep");
     Serial.flush();
     backlight(0);
-    tft.writecommand(0x10);   // ST7789 SLPIN
-    delay(5);
-
-    gpio_wakeup_enable((gpio_num_t)PIN_BOOT, GPIO_INTR_LOW_LEVEL);
-    // The XPT2046's pen interrupt goes low on a touch. Only use it when it
-    // idles high, or the board would wake straight away.
-    if (digitalRead(PIN_TOUCH_IRQ) == HIGH)
-        gpio_wakeup_enable((gpio_num_t)PIN_TOUCH_IRQ, GPIO_INTR_LOW_LEVEL);
-    esp_sleep_enable_gpio_wakeup();
-    esp_light_sleep_start();
-    gpio_wakeup_disable((gpio_num_t)PIN_BOOT);
-    gpio_wakeup_disable((gpio_num_t)PIN_TOUCH_IRQ);
-
-    tft.writecommand(0x11);   // SLPOUT
-    delay(120);
-    UI::drawScreen();
-    s_power = Power::Woke;
-    s_lastActivity = millis();
-    backlight(Store::brightnessPwm());
-    Serial.println("[power] awake");
+    tft.writecommand(0x10);
+    // The XPT2046's pen interrupt goes low on a touch. Only wake on it when
+    // it idles high, or the board would wake straight away; else BOOT.
+    if (digitalRead(PIN_TOUCH_IRQ) == HIGH) esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_TOUCH_IRQ, 0);
+    else                                    esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_BOOT, 0);
+    esp_deep_sleep_start();
 }
 
 void powerTick() {
-    const uint32_t idle = millis() - s_lastActivity;
+    const uint32_t now = millis();
+    if (s_power == Power::Standby) {
+        if (digitalRead(PIN_BOOT) == LOW) { activity(); return; }
+        if (now - s_standbySince >= DEEP_AFTER_MS) deepSleep();
+        return;
+    }
+    const uint32_t idle = now - s_lastActivity;
     if (idle >= Store::sleepAfterMs()) {
-        sleepNow();
-    } else if (s_power != Power::Dimmed && idle >= Store::dimAfterMs()) {
+        standby();
+    } else if (s_power == Power::Active && idle >= Store::dimAfterMs()) {
         s_power = Power::Dimmed;
         backlight(DIM_PWM);
     }
@@ -90,6 +104,7 @@ void batteryGuard() {
     }
     if (!lowSince) lowSince = millis();
     if (millis() - lowSince < 15000) return;
+    if (s_power == Power::Standby) wakeScreen();
     backlight(Store::brightnessPwm());
     UI::message("Battery empty - charge me");
     delay(3000);
@@ -110,6 +125,13 @@ bool     s_longDone = false;
 void sendVolume(Hit h) {
     const int8_t sig = h == Hit::VolDown ? IrCodes::volDown : h == Hit::VolUp ? IrCodes::volUp : IrCodes::mute;
     IrCodes::send(DEV_AMP, sig);
+}
+
+void mediaKey(Ble::Key k) {
+    if (Ble::sendKey(k)) return;
+    UI::message(Ble::paired() ? "PC not connected" : "Pair a PC in Settings first");
+    delay(1200);
+    UI::drawTabsAndPanel();
 }
 
 void setScreen(Screen s) {
@@ -137,6 +159,9 @@ void loadIrFiles() {
 void onPress(const Target& t) {
     IrDevice& d = IrCodes::devices[UI::device];
     switch (t.hit) {
+    case Hit::MediaPrev: mediaKey(Ble::Key::Prev); break;
+    case Hit::MediaPlay: mediaKey(Ble::Key::PlayPause); break;
+    case Hit::MediaNext: mediaKey(Ble::Key::Next); break;
     case Hit::VolDown: case Hit::VolUp: case Hit::Mute:
         sendVolume(t.hit);
         s_nextRepeat = millis() + HOLD_REPEAT_DELAY_MS;
@@ -165,7 +190,7 @@ void onRelease(const Target& t, uint32_t heldMs) {
     IrDevice& d = IrCodes::devices[UI::device];
     switch (t.hit) {
     case Hit::Gear:  setScreen(Screen::Settings); return;
-    case Hit::Back:  setScreen(Screen::Main); return;
+    case Hit::Back:  setScreen(UI::screen == Screen::Pairing ? Screen::Settings : Screen::Main); return;
     case Hit::Tab:
         if (t.arg != UI::device) {
             UI::device = t.arg;
@@ -185,9 +210,12 @@ void onRelease(const Target& t, uint32_t heldMs) {
         loadIrFiles();
         UI::drawScreen();
         return;
-    case Hit::Pairing:
-        UI::message("Bluetooth: next update");
-        delay(1200);
+    case Hit::Pairing: setScreen(Screen::Pairing); return;
+    case Hit::Forget:
+        if (!Ble::paired()) return;
+        Ble::forget();
+        UI::message("Forgotten. Remove it in Windows too");
+        delay(2500);
         UI::drawScreen();
         return;
     case Hit::Theme:
@@ -268,8 +296,7 @@ void touchTick() {
 
 void setup() {
     Serial.begin(115200);
-    setCpuFrequencyMhz(80);                // plenty for a remote, far less current
-    btStop();                               // radio off until Bluetooth arrives
+    setCpuFrequencyMhz(80);                // plenty for a remote (Bluetooth needs >= 80)
 
     pinMode(PIN_AMP_EN, OUTPUT);  digitalWrite(PIN_AMP_EN, LOW);
     pinMode(PIN_LED_R, OUTPUT);   digitalWrite(PIN_LED_R, HIGH);
@@ -288,9 +315,12 @@ void setup() {
     backlight(Store::brightnessPwm());
 
     Touch::begin();
-    if (!Store::s.calOk || digitalRead(PIN_BOOT) == LOW) Touch::calibrate();
+    // BOOT held at power-on recalibrates -- but not when BOOT just woke us.
+    const bool woke = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED;
+    if (!Store::s.calOk || (!woke && digitalRead(PIN_BOOT) == LOW)) Touch::calibrate();
 
     Battery::begin();
+    Ble::begin(Battery::percent());
     IrCodes::txBegin();
     IrCodes::sdBegin();
     loadIrFiles();
@@ -301,11 +331,22 @@ void setup() {
 
 void loop() {
     touchTick();
+
+    const uint8_t ch = Ble::poll();
+    if (ch && s_power != Power::Standby) UI::onBle(ch);
+
     if (Battery::update()) {
-        UI::drawStatus();
-        UI::drawBatteryInfo();
+        static uint8_t sentPct = 255;
+        if (Battery::percent() != sentPct) {
+            sentPct = Battery::percent();
+            Ble::setBattery(sentPct);       // Windows shows it under Bluetooth
+        }
+        if (s_power != Power::Standby) {
+            UI::drawStatus();
+            UI::drawBatteryInfo();
+        }
     }
     batteryGuard();
     powerTick();
-    delay(10);
+    delay(s_power == Power::Standby ? 40 : 10);
 }

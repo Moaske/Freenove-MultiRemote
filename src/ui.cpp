@@ -5,6 +5,7 @@
 #include "ir_codes.h"
 #include "battery.h"
 #include "settings.h"
+#include "ble_link.h"
 #include <TFT_eSPI.h>
 
 extern TFT_eSPI tft;
@@ -50,31 +51,128 @@ void button(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t fill, uint16_t 
 
 // ---- Remote screen ----
 
-void drawNowPlaying() {
-    const Palette& p = palette();
-    tft.fillRect(0, NOW_Y, SCREEN_W, NOW_H, p.bg);
-    tft.fillRoundRect(6, NOW_Y + 4, 60, 60, 6, p.raised);
-    Icons::note(36, NOW_Y + 34, p.textFaint);
+constexpr int16_t ART_X = 6, ART_Y = NOW_Y + 4;
 
-    // Bluetooth to the PC is the next step: until then say so here.
+void drawArt() {
+    const Palette& p = palette();
+    if (Ble::connected() && Ble::artValid()) {
+        tft.setSwapBytes(true);   // the pixels are RGB565 values, low byte first
+        tft.pushImage(ART_X, ART_Y, Ble::ART_W, Ble::ART_H, Ble::art());
+        tft.setSwapBytes(false);
+    } else {
+        tft.fillRect(ART_X, ART_Y, Ble::ART_W, Ble::ART_H, p.bg);
+        tft.fillRoundRect(ART_X, ART_Y, Ble::ART_W, Ble::ART_H, 6, p.raised);
+        Icons::note(ART_X + 30, ART_Y + 30, p.textFaint);
+    }
+}
+
+// Three lines next to the cover: bold, dim, faint.
+void nowLines(const String& a, const String& b, const String& c) {
+    const Palette& p = palette();
+    tft.fillRect(72, NOW_Y, SCREEN_W - 72, NOW_H, p.bg);
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BOLD);
     tft.setTextColor(p.text, p.bg);
-    textFit("No PC connected", 74, NOW_Y + 10, 160);
+    textFit(a, 74, NOW_Y + 10, 160);
     tft.setTextFont(2);
     tft.setTextColor(p.textDim, p.bg);
-    textFit("Bluetooth and track info", 74, NOW_Y + 32, 160);
+    textFit(b, 74, NOW_Y + 32, 160);
     tft.setTextColor(p.textFaint, p.bg);
-    textFit("arrive in the next update", 74, NOW_Y + 48, 160);
+    textFit(c, 74, NOW_Y + 48, 160);
+}
+
+void drawNowText() {
+    const Ble::NowPlaying& np = Ble::now();
+    if (!Ble::paired() && !Ble::connected()) {
+        nowLines("No PC paired", "Pair in Settings >", "Bluetooth pairing");
+    } else if (!Ble::connected()) {
+        nowLines("PC not connected", "Waiting for the PC...", "Is its Bluetooth on?");
+    } else if (!Ble::appSeen()) {
+        nowLines("Connected to PC", "Media keys work. Start", "the tray app for tracks");
+    } else if (np.state == Ble::Play::Stopped || np.title.isEmpty()) {
+        nowLines("Nothing playing", "", "");
+    } else {
+        nowLines(np.title, np.artist, np.album);
+    }
+}
+
+void drawNowPlaying() {
+    drawArt();
+    drawNowText();
 }
 
 void drawMedia(uint8_t i, bool pressed) {
     const Palette& p = palette();
     const int16_t x = colX(i);
-    const uint16_t fill = pressed ? p.border : (i == 1 ? p.btBg : p.raised);
+    const bool on = Ble::connected();
+    const uint16_t fill = pressed ? p.border : (i == 1 && on ? p.btBg : p.raised);
     button(x, MEDIA_Y, COL_W, ROW_H, fill, fill);
-    const Icon ic = i == 0 ? Icon::Prev : i == 1 ? Icon::PlayPause : Icon::Next;
-    Icons::draw(ic, x + COL_W / 2, MEDIA_Y + ROW_H / 2, i == 1 ? p.btIcon : p.bt, fill, p.rec);
+    Icon ic = i == 0 ? Icon::Prev : Icon::Next;
+    if (i == 1) {
+        // Follow the PC when the tray app tells us what it is doing.
+        const Ble::Play st = Ble::now().state;
+        ic = st == Ble::Play::Playing ? Icon::Pause
+           : (st == Ble::Play::Paused || st == Ble::Play::Stopped) ? Icon::Play
+           : Icon::PlayPause;
+    }
+    const uint16_t fg = !on ? p.textFaint : i == 1 ? p.btIcon : p.bt;
+    Icons::draw(ic, x + COL_W / 2, MEDIA_Y + ROW_H / 2, fg, fill, p.rec);
+}
+
+// ---- Bluetooth screen ----
+
+constexpr int16_t BT_STATUS_Y = 36, BT_FORGET_Y = 268, BT_FORGET_H = 44;
+
+void drawPairing() {
+    const Palette& p = palette();
+    tft.fillScreen(p.bg);
+    tft.fillRoundRect(PAD, SET_HDR_Y, 40, SET_HDR_H, 6, p.raised);
+    Icons::back(PAD + 20, SET_HDR_Y + SET_HDR_H / 2, p.text);
+    tft.setFreeFont(FONT_BOLD);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(p.text, p.bg);
+    tft.drawString("Bluetooth", 54, SET_HDR_Y + SET_HDR_H / 2);
+
+    // Status
+    const bool c = Ble::connected(), b = Ble::paired();
+    tft.fillRoundRect(PAD, BT_STATUS_Y, SCREEN_W - 2 * PAD, 44, 7, p.surface);
+    Icons::bluetooth(18, BT_STATUS_Y + 22, c ? p.bt : p.textFaint);
+    tft.setFreeFont(FONT_BOLD);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(p.text, p.surface);
+    tft.drawString(c ? "Connected" : b ? "Paired, not connected" : "Not paired", 32, BT_STATUS_Y + 6);
+    tft.setTextFont(2);
+    tft.setTextColor(p.textFaint, p.surface);
+    tft.drawString(c ? (Ble::appSeen() ? "Tray app running" : "Tray app not running")
+                     : "Visible as \"MultiRemote\"", 32, BT_STATUS_Y + 25);
+
+    // How to pair
+    const char* lines[] = {
+        "To pair with your Windows PC:",
+        "1. Settings > Bluetooth & devices",
+        "2. Add device > Bluetooth",
+        "3. Choose \"MultiRemote\"",
+        "",
+        "Media keys work straight away.",
+        "Run the tray app on the PC",
+        "for track info and covers.",
+    };
+    tft.setTextFont(2);
+    tft.setTextDatum(TL_DATUM);
+    int16_t y = 92;
+    for (const char* l : lines) {
+        tft.setTextColor(l == lines[0] ? p.text : p.textDim, p.bg);
+        tft.drawString(l, 10, y);
+        y += 20;
+    }
+
+    // Forget
+    tft.fillRoundRect(PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H, 7, b ? p.surface : p.bg);
+    tft.drawRoundRect(PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H, 7, p.border);
+    tft.setFreeFont(FONT_BOLD);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(b ? p.rec : p.border, b ? p.surface : p.bg);
+    tft.drawString("Forget paired PC", SCREEN_W / 2, BT_FORGET_Y + BT_FORGET_H / 2);
 }
 
 void drawVol(uint8_t i, bool pressed) {
@@ -129,7 +227,7 @@ void segments(int16_t x, int16_t y, int16_t w, int16_t h, const char* const* opt
 void settingsRow(int16_t y, bool bt, const char* title, const String& sub) {
     const Palette& p = palette();
     tft.fillRoundRect(PAD, y, SCREEN_W - 2 * PAD, SET_ROW_H, 7, p.surface);
-    if (bt) Icons::bluetooth(18, y + SET_ROW_H / 2, p.bt);
+    if (bt) Icons::bluetooth(18, y + SET_ROW_H / 2, Ble::connected() ? p.bt : p.textFaint);
     else    Icons::file(18, y + SET_ROW_H / 2, p.ir, p.surface);
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BOLD);
@@ -179,7 +277,8 @@ void drawSettings() {
     tft.setTextColor(p.textFaint, p.bg);
     tft.drawString("build " FW_VERSION, SCREEN_W - 8, SET_HDR_Y + SET_HDR_H / 2);
 
-    settingsRow(SET_BT_Y, true, "Bluetooth pairing", "Arrives in the next update");
+    settingsRow(SET_BT_Y, true, "Bluetooth pairing",
+                Ble::connected() ? "Connected to PC" : Ble::paired() ? "Paired, PC not connected" : "Not paired yet");
     settingsRow(SET_IR_Y, false, "Load .ir files", irStatus);
     drawThemeRow();
 
@@ -223,7 +322,7 @@ void drawStatus() {
     if (screen != Screen::Main) return;
     const Palette& p = palette();
     tft.fillRect(0, STATUS_Y, SCREEN_W, STATUS_H, p.bg);
-    Icons::bluetooth(9, STATUS_Y + STATUS_H / 2, p.textFaint);   // grey: not connected yet
+    Icons::bluetooth(9, STATUS_Y + STATUS_H / 2, Ble::connected() ? p.bt : p.textFaint);
 
     const int16_t bx = 18, by = STATUS_Y + 5, bw = 182, bh = 14;
     tft.fillRoundRect(bx, by, bw, bh, 4, p.battTrack);
@@ -295,6 +394,10 @@ void drawScreen() {
         drawSettings();
         return;
     }
+    if (screen == Screen::Pairing) {
+        drawPairing();
+        return;
+    }
     tft.fillScreen(palette().bg);
     drawStatus();
     drawNowPlaying();
@@ -320,9 +423,25 @@ void drawTarget(const Target& t, bool pressed) {
     }
 }
 
+void onBle(uint8_t ch) {
+    if (screen == Screen::Main) {
+        if (ch & Ble::CH_LINK) {
+            drawStatus();
+            for (uint8_t i = 0; i < 3; i++) drawMedia(i, false);
+        }
+        if (ch & Ble::CH_ART) drawArt();
+        if (ch & (Ble::CH_LINK | Ble::CH_META)) {
+            drawNowText();
+            drawMedia(1, false);
+        }
+    } else if (ch & (Ble::CH_LINK | Ble::CH_META)) {
+        drawScreen();   // Settings / Bluetooth show the connection state
+    }
+}
+
 void message(const char* text) {
     const Palette& p = palette();
-    const int16_t y = screen == Screen::Main ? GRID_Y + 30 : SET_IR_Y + 8;
+    const int16_t y = screen == Screen::Main ? GRID_Y + 30 : screen == Screen::Pairing ? 230 : SET_IR_Y + 8;
     tft.fillRoundRect(20, y, SCREEN_W - 40, 30, 7, p.raised);
     tft.setTextFont(2);
     tft.setTextDatum(MC_DATUM);
@@ -353,6 +472,12 @@ Target hitTest(int16_t x, int16_t y) {
             slotRect(s, sx, sy);
             if (in(x, y, sx, sy, COL_W, ROW_H)) { set(Hit::Slot, s, sx, sy, COL_W, ROW_H); return t; }
         }
+        return t;
+    }
+
+    if (screen == Screen::Pairing) {
+        if (in(x, y, 0, 0, 60, SET_HDR_Y + SET_HDR_H + 2)) { set(Hit::Back, 0, PAD, SET_HDR_Y, 40, SET_HDR_H); return t; }
+        if (in(x, y, PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H)) { set(Hit::Forget, 0, PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H); return t; }
         return t;
     }
 
