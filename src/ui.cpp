@@ -173,6 +173,11 @@ void drawSettings() {
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(p.text, p.bg);
     tft.drawString("Settings", 54, SET_HDR_Y + SET_HDR_H / 2);
+    // Which build this is: the commit it was built from.
+    tft.setTextFont(1);
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(p.textFaint, p.bg);
+    tft.drawString("build " FW_VERSION, SCREEN_W - 8, SET_HDR_Y + SET_HDR_H / 2);
 
     settingsRow(SET_BT_Y, true, "Bluetooth pairing", "Arrives in the next update");
     settingsRow(SET_IR_Y, false, "Load .ir files", irStatus);

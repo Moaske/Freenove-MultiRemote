@@ -2,6 +2,11 @@
 #pragma once
 #include <Arduino.h>
 
+// Set by the GitHub Actions build to the commit's short hash.
+#ifndef FW_VERSION
+#define FW_VERSION "local"
+#endif
+
 // ---- Pins -------------------------------------------------------------
 // IR emitter (Adafruit 5639) IN, on the SPI expansion header.
 constexpr uint8_t PIN_IR_TX     = 27;

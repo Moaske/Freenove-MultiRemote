@@ -29,6 +29,7 @@ jobs:
       - name: Build
         run: |
           set -o pipefail
+          export PLATFORMIO_BUILD_FLAGS="-DFW_VERSION=\\\"${GITHUB_SHA::7}\\\""
           if ! pio run -e freenove28 2>&1 | tee build.log; then
             # Compiler errors as one annotation, readable from the run page and the API.
             MSG=$(grep -E "error|Error|undefined reference" build.log | head -40 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')
