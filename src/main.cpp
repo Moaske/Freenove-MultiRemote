@@ -12,6 +12,7 @@
 #include <TFT_eSPI.h>
 #include <esp_sleep.h>
 #include <driver/gpio.h>
+#include <driver/rtc_io.h>
 
 #include "config.h"
 #include "settings.h"
@@ -296,6 +297,10 @@ void touchTick() {
 
 void setup() {
     Serial.begin(115200);
+    // A deep-sleep wake leaves the wake pins in RTC mode, where normal reads
+    // don't work: hand them back to the digital side first.
+    rtc_gpio_deinit((gpio_num_t)PIN_TOUCH_IRQ);
+    rtc_gpio_deinit((gpio_num_t)PIN_BOOT);
     setCpuFrequencyMhz(80);                // plenty for a remote (Bluetooth needs >= 80)
 
     pinMode(PIN_AMP_EN, OUTPUT);  digitalWrite(PIN_AMP_EN, LOW);

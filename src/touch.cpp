@@ -11,7 +11,11 @@ namespace Touch {
 namespace {
 
 SPIClass touchSPI(HSPI);
-XPT2046_Touchscreen ts(PIN_TOUCH_CS, PIN_TOUCH_IRQ);
+// No interrupt pin given on purpose: with one, the library only reads after
+// a falling edge on it, and sleeping/waking on that same pin switched the
+// edge interrupt off -- the screen then never read a touch again. Polled,
+// it asks the chip every time, which costs nothing noticeable.
+XPT2046_Touchscreen ts(PIN_TOUCH_CS);
 
 const int16_t Z_MIN = 350;   // pressure below this is not a touch
 
