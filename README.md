@@ -16,8 +16,8 @@ Windows 11 PC over Bluetooth.
 | IR from Flipper `.ir` files on the SD card | done |
 | Battery gauge (bq25185 charger on BAT+) | done |
 | Settings: theme, brightness, dim, sleep | done |
-| Bluetooth to the PC: media keys | next |
-| Track title, artist, album art (tray app on the PC) | next |
+| Bluetooth to the PC: media keys, battery level in Windows | done |
+| Track title, artist, album art (tray app on the PC) | done |
 
 ## Hardware
 
@@ -78,6 +78,23 @@ capitals (`cd` → CD), longer with a capital first letter (`video` → Video).
 Supported protocols: NEC, NECext, Samsung32, SIRC, SIRC15, SIRC20, RC5,
 RC6 and raw. Sony codes are sent three times, as Sony devices require.
 
+## Bluetooth and the tray app
+
+**Pairing:** on the PC open *Settings → Bluetooth & devices → Add device →
+Bluetooth* and choose **MultiRemote**. Previous, Play/Pause and Next then work
+straight away as media keys, for whatever player is active, and Windows shows
+the remote's battery level. *Settings → Bluetooth pairing* on the remote shows
+the state and has **Forget paired PC** (remove it in Windows too).
+
+**Tray app** (`tray/`, built as `MultiRemoteTray.exe`): run it on the PC and
+the remote shows the track title, artist, album and cover, and its Play/Pause
+button follows the player. Right-click the tray icon for *Start with
+Windows*. It reads the same "now playing" information Windows shows in its
+volume overlay, so Spotify, browsers, foobar2000 and most players work.
+Windows may warn about an unknown app the first time: *More info → Run anyway*.
+
+Accented letters are shown without accents (the screen's fonts are ASCII).
+
 ## Building and flashing
 
 GitHub Actions builds the firmware on every push. Open the latest run under
@@ -87,14 +104,18 @@ flash it with the browser tool at <https://espressif.github.io/esptool-js/>:
 - **First install:** `merged-full-install.bin` at offset `0x0`
 - **Updates:** `firmware.bin` at offset `0x10000` (keeps your settings)
 
+The tray app is in the **multiremote-tray-app** artifact of the same run.
+
 On first start the screen asks you to tap three crosses to calibrate touch.
 Hold **BOOT** while powering on to calibrate again.
 
 ## Power saving
 
 - CPU at 80 MHz, Wi-Fi never used, the on-board speaker amp switched off
-- Screen dims after 5/15/30 s and sleeps after 1/2/5 min (Settings)
-- Sleep wakes on a touch or the BOOT button
+- Screen dims after 5/15/30 s and switches off after 1/2/5 min (Settings);
+  Bluetooth stays connected, so a touch brings it back instantly
+- After 30 minutes with the screen off it goes into deep sleep; a touch or
+  BOOT starts it again and the PC reconnects within a few seconds
 - Below 3.38 V on the cell it shows a message and powers down cleanly
 
 ## Credits
