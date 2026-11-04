@@ -182,6 +182,7 @@ void drawSettings() {
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(p.textFaint, p.bg);
     tft.drawString("Power saving", 8, SET_PWR_LABEL_Y + 8);
+    drawBatteryInfo();
     for (uint8_t r = 0; r < 3; r++) drawPowerRow(r);
 }
 
@@ -192,6 +193,26 @@ bool in(int16_t px, int16_t py, int16_t x, int16_t y, int16_t w, int16_t h) {
 }  // namespace
 
 // ---- Public ----------------------------------------------------------------
+
+// Right of the "Power saving" label: what BAT+ measures, and whether that
+// counts as the charger's input power.
+void drawBatteryInfo() {
+    if (screen != Screen::Settings) return;
+    const Palette& p = palette();
+    tft.fillRect(110, SET_PWR_LABEL_Y, SCREEN_W - 110, 18, p.bg);
+    String s;
+    if (!Battery::present()) {
+        s = "No battery";
+    } else {
+        const uint16_t mv = Battery::millivolts();
+        s = String(mv / 1000) + "." + String((mv % 1000) / 100) + String((mv % 100) / 10) + " V";
+        s += Battery::external() ? "  USB power" : "  " + String(Battery::percent()) + "%";
+    }
+    tft.setTextFont(2);
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(p.textFaint, p.bg);
+    tft.drawString(s, SCREEN_W - 8, SET_PWR_LABEL_Y + 8);
+}
 
 void drawStatus() {
     if (screen != Screen::Main) return;

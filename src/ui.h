@@ -26,6 +26,7 @@ namespace UI {
 
     void drawScreen();              // everything
     void drawStatus();              // battery bar row
+    void drawBatteryInfo();         // the measured voltage, on Settings
     void drawTabsAndPanel();
     void drawSlot(uint8_t slot, bool pressed);
     void drawTarget(const Target& t, bool pressed);

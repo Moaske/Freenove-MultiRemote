@@ -5,9 +5,12 @@ namespace Battery {
 namespace {
 
 // mV at BAT+. With input power the bq25185 holds BAT+ at 4.5 V; a cell tops
-// out at 4.2 V. Hysteresis so ADC noise cannot flicker between the two.
-const uint16_t EXT_ON_MV  = 4350;
-const uint16_t EXT_OFF_MV = 4280;
+// out at 4.2 V. The ESP32's ADC reads a few percent low on some chips near
+// the top of its range (one board read the 4.5 V as under 4.35 V and showed
+// 100%), so the line sits just above a full cell. Hysteresis so ADC noise
+// cannot flicker between the two.
+const uint16_t EXT_ON_MV  = 4250;
+const uint16_t EXT_OFF_MV = 4210;
 const uint16_t PRESENT_MV = 2500;
 const uint32_t SAMPLE_MS  = 1000;
 
@@ -71,8 +74,11 @@ bool update() {
     s_lastAt = now;
     const uint8_t pct = s_pct;
     const bool ext = s_ext, pres = s_present;
+    const uint16_t mv = s_mv;
     sample(false);
-    return pct != s_pct || ext != s_ext || pres != s_present;
+    // A 10 mV step counts too, so the voltage shown in Settings keeps up.
+    return pct != s_pct || ext != s_ext || pres != s_present ||
+           (s_mv > mv ? s_mv - mv : mv - s_mv) >= 10;
 }
 
 uint8_t percent()      { return s_pct; }

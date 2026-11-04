@@ -301,7 +301,10 @@ void setup() {
 
 void loop() {
     touchTick();
-    if (Battery::update()) UI::drawStatus();
+    if (Battery::update()) {
+        UI::drawStatus();
+        UI::drawBatteryInfo();
+    }
     batteryGuard();
     powerTick();
     delay(10);
