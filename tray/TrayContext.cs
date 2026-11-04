@@ -32,6 +32,7 @@ sealed class TrayContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Send track info now", null, (_, _) => { _link.ResetCache(); Poke(); });
         menu.Items.Add(_autostart);
+        menu.Items.Add("Open log", null, (_, _) => OpenLog());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => Quit());
 
@@ -60,8 +61,9 @@ sealed class TrayContext : ApplicationContext
 
     async Task LoopAsync(CancellationToken ct)
     {
+        Log.Write($"--- MultiRemote tray app started (Windows {Environment.OSVersion.Version})");
         try { await _media.StartAsync(); }
-        catch (Exception ex) { _link.SetStatus("Cannot read Windows media: " + ex.Message); }
+        catch (Exception ex) { Log.Error("media start", ex); _link.SetStatus("Cannot read Windows media: " + ex.Message); }
 
         while (!ct.IsCancellationRequested)
         {
@@ -79,12 +81,19 @@ sealed class TrayContext : ApplicationContext
                 }
             }
             catch (OperationCanceledException) { break; }
-            catch (Exception ex) { _link.SetStatus("Error: " + ex.Message); }
+            catch (Exception ex) { Log.Error("loop", ex); _link.SetStatus("Error: " + ex.Message); }
 
             // Re-check every few seconds, or at once when the music changes.
             try { await _wake.WaitAsync(_link.Connected ? 5000 : 10000, ct); }
             catch (OperationCanceledException) { break; }
         }
+    }
+
+    static void OpenLog()
+    {
+        Log.Write("(log opened)");
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Log.File) { UseShellExecute = true }); }
+        catch (Exception ex) { MessageBox.Show("Could not open " + Log.File + "\n" + ex.Message, "MultiRemote"); }
     }
 
     void ShowStatus()

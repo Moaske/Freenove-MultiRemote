@@ -34,6 +34,7 @@ sealed class RemoteLink : IDisposable
     public void SetStatus(string s)
     {
         if (s == Status) return;
+        Log.Write("Status: " + s);
         Status = s;
         StatusChanged?.Invoke();
     }
@@ -52,6 +53,8 @@ sealed class RemoteLink : IDisposable
             {
                 var selector = BluetoothLEDevice.GetDeviceSelectorFromPairingState(true);
                 var found = await DeviceInformation.FindAllAsync(selector);
+                Log.Write($"Paired Bluetooth LE devices: {found.Count}" +
+                          string.Concat(found.Select(d => $"\n    '{d.Name}'  {d.Id}")));
                 var info = found.FirstOrDefault(d => d.Name.StartsWith(DeviceName, StringComparison.OrdinalIgnoreCase));
                 if (info == null)
                 {
@@ -59,14 +62,18 @@ sealed class RemoteLink : IDisposable
                     return false;
                 }
                 _device = await BluetoothLEDevice.FromIdAsync(info.Id);
-                if (_device == null) { SetStatus("Remote not reachable"); return false; }
+                if (_device == null) { Log.Write("FromIdAsync returned null"); SetStatus("Remote not reachable"); return false; }
+                Log.Write($"Opened '{_device.Name}', connection: {_device.ConnectionStatus}");
                 _device.ConnectionStatusChanged += OnConnectionChanged;
             }
 
             // Asking for the service also makes Windows connect.
             var services = await _device.GetGattServicesForUuidAsync(ServiceUuid, BluetoothCacheMode.Uncached);
+            Log.Write($"Our service: {services.Status}, found {services.Services?.Count ?? 0}" +
+                      (services.ProtocolError.HasValue ? $", protocol error {services.ProtocolError}" : ""));
             if (services.Status != GattCommunicationStatus.Success || services.Services.Count == 0)
             {
+                await LogAllServicesAsync();
                 SetStatus("Remote not in range or asleep");
                 return false;
             }
@@ -75,6 +82,7 @@ sealed class RemoteLink : IDisposable
 
             var meta = await _service.GetCharacteristicsForUuidAsync(MetaUuid, BluetoothCacheMode.Uncached);
             var art = await _service.GetCharacteristicsForUuidAsync(ArtUuid, BluetoothCacheMode.Uncached);
+            Log.Write($"Characteristics: meta {meta.Status} ({meta.Characteristics?.Count ?? 0}), art {art.Status} ({art.Characteristics?.Count ?? 0})");
             if (meta.Status != GattCommunicationStatus.Success || meta.Characteristics.Count == 0 ||
                 art.Status != GattCommunicationStatus.Success || art.Characteristics.Count == 0)
             {
@@ -89,8 +97,8 @@ sealed class RemoteLink : IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error("connect", ex);
             SetStatus("Remote not reachable");
-            System.Diagnostics.Debug.WriteLine(ex);
             Drop();
             return false;
         }
@@ -98,6 +106,7 @@ sealed class RemoteLink : IDisposable
 
     void OnConnectionChanged(BluetoothLEDevice d, object _)
     {
+        Log.Write("Connection status: " + d.ConnectionStatus);
         if (d.ConnectionStatus == BluetoothConnectionStatus.Connected) return;
         _meta = _art = null;
         SetStatus("Remote not in range or asleep");
@@ -114,6 +123,7 @@ sealed class RemoteLink : IDisposable
             string? artKey = np.Art == null ? null : Convert.ToHexString(SHA1.HashData(np.Art));
             if (np.Art != null && artKey != _lastArt)
             {
+                Log.Write($"Sending cover ({np.Art.Length} bytes)");
                 for (int off = 0; off < np.Art.Length; off += ArtChunk)
                 {
                     int n = Math.Min(ArtChunk, np.Art.Length - off);
@@ -130,6 +140,7 @@ sealed class RemoteLink : IDisposable
             string meta = string.Join('\u001F', state.ToString(), np.Title, np.Artist, np.Album, np.Art != null ? "1" : "0");
             if (meta != _lastMeta)
             {
+                Log.Write($"Sending track: {state} '{np.Title}' / '{np.Artist}' / '{np.Album}', cover: {np.Art != null}");
                 if (!await WriteAsync(_meta!, Encoding.ASCII.GetBytes(meta))) return false;
                 _lastMeta = meta;
             }
@@ -138,7 +149,7 @@ sealed class RemoteLink : IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            Log.Error("send", ex);
             Drop();
             SetStatus("Lost the remote, retrying...");
             return false;
@@ -156,7 +167,22 @@ sealed class RemoteLink : IDisposable
         var w = new DataWriter();
         w.WriteBytes(data);
         var r = await c.WriteValueWithResultAsync(w.DetachBuffer(), GattWriteOption.WriteWithResponse);
+        if (r.Status != GattCommunicationStatus.Success)
+            Log.Write($"Write of {data.Length} bytes failed: {r.Status}" +
+                      (r.ProtocolError.HasValue ? $", protocol error {r.ProtocolError}" : ""));
         return r.Status == GattCommunicationStatus.Success;
+    }
+
+    // When our service is missing: what the remote does offer.
+    async Task LogAllServicesAsync()
+    {
+        try
+        {
+            var all = await _device!.GetGattServicesAsync(BluetoothCacheMode.Uncached);
+            Log.Write($"All services: {all.Status}" + string.Concat(all.Services.Select(s => "\n    " + s.Uuid)));
+            foreach (var s in all.Services) s.Dispose();
+        }
+        catch (Exception ex) { Log.Error("list services", ex); }
     }
 
     void Drop()

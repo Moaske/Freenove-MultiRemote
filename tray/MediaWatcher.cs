@@ -39,6 +39,7 @@ sealed class MediaWatcher
             _session.PlaybackInfoChanged -= OnPlayback;
         }
         _session = _mgr?.GetCurrentSession();
+        Log.Write("Media session: " + (_session?.SourceAppUserModelId ?? "(none)"));
         if (_session != null)
         {
             _session.MediaPropertiesChanged += OnMedia;
@@ -65,14 +66,14 @@ sealed class MediaWatcher
 
         GlobalSystemMediaTransportControlsSessionMediaProperties props;
         try { props = await s.TryGetMediaPropertiesAsync(); }
-        catch { return NowPlaying.Nothing; }
+        catch (Exception ex) { Log.Error("read media", ex); return NowPlaying.Nothing; }
 
         var artist = string.IsNullOrWhiteSpace(props.Artist) ? props.AlbumArtist : props.Artist;
         byte[]? art = null;
         if (props.Thumbnail != null)
         {
             try { art = await ReadArtAsync(props.Thumbnail); }
-            catch { art = null; }   // some players hand out a broken thumbnail
+            catch (Exception ex) { Log.Error("read cover", ex); art = null; }   // some players hand out a broken thumbnail
         }
 
         if (string.IsNullOrWhiteSpace(props.Title)) state = PlayState.None;
