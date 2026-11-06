@@ -48,6 +48,7 @@ sealed class TrayContext : ApplicationContext
         };
 
         _media.Changed += Poke;
+        _link.ConnectionChanged += Poke;
         _link.StatusChanged += () => _ui.Post(_ => ShowStatus(), null);
         ShowStatus();
         _ = Task.Run(() => LoopAsync(_stop.Token));
@@ -84,7 +85,9 @@ sealed class TrayContext : ApplicationContext
             catch (Exception ex) { Log.Error("loop", ex); _link.SetStatus("Error: " + ex.Message); }
 
             // Re-check every few seconds, or at once when the music changes.
-            try { await _wake.WaitAsync(_link.Connected ? 5000 : 10000, ct); }
+            // Not connected: Windows tells us when it reconnects the remote, so
+            // this is only a slow fallback; nothing here touches the radio.
+            try { await _wake.WaitAsync(_link.Connected ? 5000 : 30000, ct); }
             catch (OperationCanceledException) { break; }
         }
     }

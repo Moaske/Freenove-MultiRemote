@@ -27,6 +27,8 @@ sealed class RemoteLink : IDisposable
 
     public string Status { get; private set; } = "Looking for the remote...";
     public event Action? StatusChanged;
+    public event Action? ConnectionChanged;   // Windows (dis)connected the remote
+    bool _triedUncached;
 
     public bool Connected =>
         _device?.ConnectionStatus == BluetoothConnectionStatus.Connected && _meta != null && _art != null;
@@ -45,19 +47,25 @@ sealed class RemoteLink : IDisposable
         _lastArt = null;
     }
 
+    // Gentle on the PC's Bluetooth adapter: this never makes Windows connect.
+    // Windows reconnects the paired remote by itself (it is a HID device);
+    // we only look at its service once Windows reports it as connected, and
+    // the BluetoothLEDevice is opened once and kept.
     public async Task<bool> TryConnectAsync()
     {
         try
         {
             if (_device == null)
             {
+                // A local lookup in Windows' list of paired devices: no radio traffic.
                 var selector = BluetoothLEDevice.GetDeviceSelectorFromPairingState(true);
                 var found = await DeviceInformation.FindAllAsync(selector);
-                Log.Write($"Paired Bluetooth LE devices: {found.Count}" +
-                          string.Concat(found.Select(d => $"\n    '{d.Name}'  {d.Id}")));
                 var info = found.FirstOrDefault(d => d.Name.StartsWith(DeviceName, StringComparison.OrdinalIgnoreCase));
                 if (info == null)
                 {
+                    if (Status != "Remote not paired with this PC")
+                        Log.Write($"Paired Bluetooth LE devices: {found.Count}" +
+                                  string.Concat(found.Select(d => $"\n    '{d.Name}'  {d.Id}")));
                     SetStatus("Remote not paired with this PC");
                     return false;
                 }
@@ -67,21 +75,34 @@ sealed class RemoteLink : IDisposable
                 _device.ConnectionStatusChanged += OnConnectionChanged;
             }
 
-            // Asking for the service also makes Windows connect.
-            var services = await _device.GetGattServicesForUuidAsync(ServiceUuid, BluetoothCacheMode.Uncached);
+            if (_device.ConnectionStatus != BluetoothConnectionStatus.Connected)
+            {
+                SetStatus("Remote asleep or out of range");
+                return false;
+            }
+
+            // Windows keeps the services it found at pairing; ask for a fresh
+            // look at most once per connection, only if the cached list lacks ours.
+            var services = await _device.GetGattServicesForUuidAsync(ServiceUuid, BluetoothCacheMode.Cached);
+            if ((services.Status != GattCommunicationStatus.Success || services.Services.Count == 0) && !_triedUncached)
+            {
+                _triedUncached = true;
+                Log.Write($"Our service not in Windows' cache ({services.Status}), asking the remote once");
+                services = await _device.GetGattServicesForUuidAsync(ServiceUuid, BluetoothCacheMode.Uncached);
+            }
             Log.Write($"Our service: {services.Status}, found {services.Services?.Count ?? 0}" +
                       (services.ProtocolError.HasValue ? $", protocol error {services.ProtocolError}" : ""));
             if (services.Status != GattCommunicationStatus.Success || services.Services.Count == 0)
             {
                 await LogAllServicesAsync();
-                SetStatus("Remote not in range or asleep");
+                SetStatus("Track info service not found on the remote");
                 return false;
             }
             _service?.Dispose();
             _service = services.Services[0];
 
-            var meta = await _service.GetCharacteristicsForUuidAsync(MetaUuid, BluetoothCacheMode.Uncached);
-            var art = await _service.GetCharacteristicsForUuidAsync(ArtUuid, BluetoothCacheMode.Uncached);
+            var meta = await _service.GetCharacteristicsForUuidAsync(MetaUuid, BluetoothCacheMode.Cached);
+            var art = await _service.GetCharacteristicsForUuidAsync(ArtUuid, BluetoothCacheMode.Cached);
             Log.Write($"Characteristics: meta {meta.Status} ({meta.Characteristics?.Count ?? 0}), art {art.Status} ({art.Characteristics?.Count ?? 0})");
             if (meta.Status != GattCommunicationStatus.Success || meta.Characteristics.Count == 0 ||
                 art.Status != GattCommunicationStatus.Success || art.Characteristics.Count == 0)
@@ -99,7 +120,7 @@ sealed class RemoteLink : IDisposable
         {
             Log.Error("connect", ex);
             SetStatus("Remote not reachable");
-            Drop();
+            DropService();
             return false;
         }
     }
@@ -107,9 +128,16 @@ sealed class RemoteLink : IDisposable
     void OnConnectionChanged(BluetoothLEDevice d, object _)
     {
         Log.Write("Connection status: " + d.ConnectionStatus);
-        if (d.ConnectionStatus == BluetoothConnectionStatus.Connected) return;
-        _meta = _art = null;
-        SetStatus("Remote not in range or asleep");
+        if (d.ConnectionStatus == BluetoothConnectionStatus.Connected)
+        {
+            _triedUncached = false;
+        }
+        else
+        {
+            _meta = _art = null;
+            SetStatus("Remote asleep or out of range");
+        }
+        ConnectionChanged?.Invoke();
     }
 
     public async Task<bool> SendAsync(NowPlaying np)
@@ -150,7 +178,7 @@ sealed class RemoteLink : IDisposable
         catch (Exception ex)
         {
             Log.Error("send", ex);
-            Drop();
+            DropService();
             SetStatus("Lost the remote, retrying...");
             return false;
         }
@@ -178,18 +206,24 @@ sealed class RemoteLink : IDisposable
     {
         try
         {
-            var all = await _device!.GetGattServicesAsync(BluetoothCacheMode.Uncached);
+            var all = await _device!.GetGattServicesAsync(BluetoothCacheMode.Cached);
             Log.Write($"All services: {all.Status}" + string.Concat(all.Services.Select(s => "\n    " + s.Uuid)));
             foreach (var s in all.Services) s.Dispose();
         }
         catch (Exception ex) { Log.Error("list services", ex); }
     }
 
-    void Drop()
+    // Forget the service (looked up again next time), keep the device.
+    void DropService()
     {
         _meta = _art = null;
         _service?.Dispose();
         _service = null;
+    }
+
+    void Drop()
+    {
+        DropService();
         if (_device != null)
         {
             _device.ConnectionStatusChanged -= OnConnectionChanged;
