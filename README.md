@@ -23,7 +23,7 @@ Windows 11 PC over Bluetooth.
 
 - Freenove ESP32 Display 2.8" FNK0114B_2P8
 - Adafruit High Power IR LED Emitter (5639)
-- Adafruit bq25185 USB/DC/solar charger, a 3.7 V Li-Ion cell and an on/off switch
+- Adafruit bq25185 USB/DC/solar charger, a 3.7 V Li-Ion cell and an on/off switch<br>Make sure to bridge EN (enable) to GND to disable the 3.3V buck (and its LED in the process 😏)
 
 | From | To |
 |---|---|
