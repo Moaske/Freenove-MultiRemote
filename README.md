@@ -120,8 +120,10 @@ or two to connect. `.local` addresses such as `homeassistant.local` work;
 an IP address connects slightly faster. Your real `ha.cfg` is in
 `.gitignore`, so it can't end up on GitHub by accident.
 
-**Icons** (names for `ha.cfg`):
-`bed-king` `ceiling-light-multiple` `ceiling-light` `chandelier` `coffee-maker` `desk-lamp` `desk` `fan` `fishbowl` `floor-lamp` `kettle` `lamp` `lamps` `led-strip-variant` `light-switch` `lightbulb-group` `lightbulb-outline` `lightbulb` `monitor` `outdoor-lamp` `pine-tree` `power-plug` `power-socket-eu` `power` `radiator` `sofa` `speaker` `spotlight-beam` `string-lights` `television` `track-light` `wall-sconce` `window-shutter`.
+**Icons:** use the name under the icon in `ha.cfg`.
+
+![The 33 icons with their names](docs/icons.png)
+
 They are [Material Design Icons](https://pictogrammers.com/library/mdi/)
 (Apache 2.0), the same set Home Assistant uses; `tools/make_icons.py` turns
 more of them into `.a8` files.

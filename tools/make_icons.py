@@ -9,6 +9,7 @@ firmware tints with the theme's colours.
 Writes:
   sd-card/remote/icons/<name>.a8   28x28, for the Home page buttons
   src/icons_mdi.h                  the few icons the firmware itself uses
+  docs/icons.png                   an overview with the names, for ha.cfg
 
 .a8 format: 'A' '8' width height, then width*height bytes of alpha (0..255).
 Needs: pip install cairosvg pillow. Icons: Pictogrammers, Apache 2.0.
@@ -18,7 +19,7 @@ import os
 import sys
 
 import cairosvg
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 # Icons you can give a Home page button (by these names, in ha.cfg).
 LIBRARY = [
@@ -49,6 +50,34 @@ def alpha(svg_dir, name, size):
         png = cairosvg.svg2png(bytestring=f.read(), output_width=size, output_height=size)
     img = Image.open(io.BytesIO(png)).convert("RGBA")
     return img.getchannel("A").tobytes()
+
+
+def sheet(svg_dir, path):
+    """All LIBRARY icons in a grid with their names, in the remote's colours."""
+    cols, cw, ch, pad, top = 6, 150, 118, 12, 56
+    rows = (len(LIBRARY) + cols - 1) // cols
+    W, H = pad + cols * (cw + pad), top + rows * (ch + pad) + pad
+    img = Image.new("RGB", (W, H), (0x0E, 0x11, 0x16))
+    d = ImageDraw.Draw(img)
+    fdir = "/usr/share/fonts/truetype/dejavu/"
+    try:
+        big = ImageFont.truetype(fdir + "DejaVuSans-Bold.ttf", 20)
+        small = ImageFont.truetype(fdir + "DejaVuSansCondensed.ttf", 14)
+    except OSError:
+        big = small = ImageFont.load_default()
+    d.text((pad, 16), "Home page icons  -  use the name in ha.cfg:  switch = entity, label, NAME",
+           font=big, fill=(0xE8, 0xEC, 0xF2))
+    for i, name in enumerate(sorted(LIBRARY)):
+        x = pad + (i % cols) * (cw + pad)
+        y = top + (i // cols) * (ch + pad)
+        d.rounded_rectangle((x, y, x + cw, y + ch), 10, fill=(0x16, 0x1B, 0x23), outline=(0x2A, 0x32, 0x40))
+        mask = Image.frombytes("L", (56, 56), alpha(svg_dir, name, 56))
+        tint = Image.new("RGB", (56, 56), (0xFB, 0xBF, 0x24))
+        img.paste(tint, (x + (cw - 56) // 2, y + 14), mask)
+        tw = d.textlength(name, font=small)
+        d.text((x + (cw - tw) / 2, y + ch - 28), name, font=small, fill=(0xE8, 0xEC, 0xF2))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img.save(path, optimize=True)
 
 
 def main():
@@ -83,7 +112,8 @@ def main():
         lines.append("")
     with open(os.path.join(root, "src", "icons_mdi.h"), "w") as f:
         f.write("\n".join(lines))
-    print(f"{len(LIBRARY)} icons in sd-card/remote/icons, {len(BUILTIN)} in src/icons_mdi.h")
+    sheet(svg_dir, os.path.join(root, "docs", "icons.png"))
+    print(f"{len(LIBRARY)} icons in sd-card/remote/icons, {len(BUILTIN)} in src/icons_mdi.h, docs/icons.png")
 
 
 if __name__ == "__main__":
