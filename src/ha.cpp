@@ -405,6 +405,7 @@ void loadConfig() {
         else ok = true;
     }
     for (uint8_t i = 0; i < n; i++) loadIcon(items[i]);
+    if (blinds) loadIcon(items[BLINDS]);   // drawn at half size next to its label
 
     {
         Lock l;

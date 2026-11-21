@@ -318,7 +318,20 @@ void drawBlindLabel() {
     const Palette& p = palette();
     tft.fillRect(0, BLIND_LABEL_Y, SCREEN_W, BLIND_Y - BLIND_LABEL_Y, p.bg);
     if (!Ha::hasBlinds()) return;
-    Icons::alpha(ICON_SHUTTER, PAD + 9, BLIND_LABEL_Y + 8, p.textDim, p.bg);
+    const Ha::Item& bl = Ha::item(Ha::BLINDS);
+    if (bl.hasIcon) {
+        // The icon from ha.cfg, 28 px averaged down to 14 to fit the label row.
+        constexpr uint8_t H = Ha::ICON_PX / 2;
+        uint8_t half[H * H];
+        for (uint8_t y = 0; y < H; y++)
+            for (uint8_t x = 0; x < H; x++) {
+                const uint8_t* a = bl.alpha + (2 * y) * Ha::ICON_PX + 2 * x;
+                half[y * H + x] = (a[0] + a[1] + a[Ha::ICON_PX] + a[Ha::ICON_PX + 1]) / 4;
+            }
+        Icons::alpha(half, H, H, PAD + 2, BLIND_LABEL_Y + 1, p.textDim, p.bg);
+    } else {
+        Icons::alpha(ICON_SHUTTER, PAD + 9, BLIND_LABEL_Y + 8, p.textDim, p.bg);
+    }
     tft.setTextFont(2);
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(p.textDim, p.bg);

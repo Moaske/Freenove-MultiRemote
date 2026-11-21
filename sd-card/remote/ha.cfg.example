@@ -30,4 +30,5 @@ switch = switch.string_lights, String lights, string-lights
 switch = switch.tv_socket, TV socket, television
 
 # One set of blinds (a cover in Home Assistant): Down / Stop / Up.
-blinds = cover.living_room, Blinds
+#   blinds = entity_id, label, icon   (icon optional: window-shutter)
+blinds = cover.living_room, Blinds, roller-shade
