@@ -63,6 +63,13 @@ jobs:
           name: freenove-multiremote-firmware
           path: out/
 
+      # The SD card contents (the remote folder: .ir files, icons, ha.cfg.example).
+      - name: Upload SD card files
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-card
+          path: sd-card/
+
   tray:
     runs-on: windows-latest
     steps:
