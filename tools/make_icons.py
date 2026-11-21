@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 # Icons you can give a Home page button (by these names, in ha.cfg).
 LIBRARY = [
     "lightbulb", "lightbulb-outline", "lightbulb-group", "ceiling-light",
-    "ceiling-light-multiple", "globe-light", "floor-lamp", "desk-lamp", "lamp",
+    "ceiling-light-multiple", "dome-light", "globe-light", "floor-lamp", "desk-lamp", "lamp",
     "lamps", "string-lights", "led-strip-variant", "wall-sconce", "chandelier",
     "track-light", "spotlight-beam", "outdoor-lamp", "pine-tree",
     "light-switch", "power-socket-eu", "power-plug", "power", "television",
