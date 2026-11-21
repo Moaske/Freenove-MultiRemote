@@ -1,3 +1,6 @@
 .pio/
 .vscode/
 out/
+
+# Your real Home Assistant config holds your Wi-Fi password and token.
+sd-card/remote/ha.cfg

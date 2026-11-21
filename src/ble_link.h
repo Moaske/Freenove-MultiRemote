@@ -4,20 +4,20 @@
 //    in Windows as media keys, for whatever player is active. No app needed.
 //  - The battery level, which Windows shows under Bluetooth & devices.
 //  - A service of our own that the tray app (tray/) writes to: the track's
-//    title, artist and album, playing/paused, and a 60x60 cover.
+//    title, artist and album, playing/paused, and a 54x54 cover.
 //
 // Protocol (both characteristics write-only, encrypted, so paired PCs only):
 //   META  "<state>\x1f<title>\x1f<artist>\x1f<album>\x1f<hasArt>"
 //         state: 'P' playing, 'p' paused, 'S' nothing playing; hasArt '1'/'0'
 //         Text is plain ASCII (the tray app turns e.g. "é" into "e").
-//   ART   [offset lo][offset hi][data...] -- chunks of a 60x60 RGB565 image,
-//         little-endian pixels, 7200 bytes in all, sent in order from 0.
+//   ART   [offset lo][offset hi][data...] -- chunks of a 54x54 RGB565 image,
+//         little-endian pixels, 5832 bytes in all, sent in order from 0.
 #pragma once
 #include <Arduino.h>
 
 namespace Ble {
 
-constexpr int16_t ART_W = 60, ART_H = 60;
+constexpr int16_t ART_W = 54, ART_H = 54;   // the tray app sends this size
 
 enum class Play : uint8_t { Unknown, Playing, Paused, Stopped };
 

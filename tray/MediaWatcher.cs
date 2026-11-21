@@ -17,7 +17,7 @@ sealed record NowPlaying(PlayState State, string Title, string Artist, string Al
 // What Windows says is playing (System Media Transport Controls).
 sealed class MediaWatcher
 {
-    public const int ArtSize = 60;
+    public const int ArtSize = 54;   // must match ART_W/ART_H in the firmware
 
     GlobalSystemMediaTransportControlsSessionManager? _mgr;
     GlobalSystemMediaTransportControlsSession? _session;
@@ -80,7 +80,7 @@ sealed class MediaWatcher
         return new NowPlaying(state, Ascii(props.Title), Ascii(artist), Ascii(props.AlbumTitle), art);
     }
 
-    // The cover, centre-cropped to a square, scaled to 60x60, as RGB565
+    // The cover, centre-cropped to a square, scaled to 54x54, as RGB565
     // little-endian -- exactly what the remote pushes to its screen.
     static async Task<byte[]> ReadArtAsync(Windows.Storage.Streams.IRandomAccessStreamReference thumb)
     {

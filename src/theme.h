@@ -15,6 +15,9 @@ struct Palette {
     uint16_t segOnBg, segOnText;
     uint16_t battTrack, battOk, battMid, battLow, battText;
     uint16_t rec;
+    uint16_t okFg, okBg, errFg, errBg;  // status badges
+    uint16_t ha;                        // the Home Assistant logo
+    uint16_t onBg, onFg;                // a switch that is on
 };
 
 const Palette& palette();   // the one in use (Store::s.theme)

@@ -12,6 +12,9 @@ const Palette DARK = {
     rgb(0x3A2A12), rgb(0xFBBF24),
     rgb(0x1B2029), rgb(0x1F7A3A), rgb(0x9A6700), rgb(0xB42318), rgb(0xFFFFFF),
     rgb(0xE5484D),
+    rgb(0x3DD68C), rgb(0x12301F), rgb(0xFFB4AB), rgb(0x4A1712),
+    rgb(0x18BCF2),
+    rgb(0x3A2A12), rgb(0xFBBF24),
 };
 
 const Palette LIGHT = {
@@ -23,6 +26,9 @@ const Palette LIGHT = {
     rgb(0xFEF3C7), rgb(0x92400E),
     rgb(0xD0D5DD), rgb(0x1F7A3A), rgb(0x9A6700), rgb(0xB42318), rgb(0xFFFFFF),
     rgb(0xD92D20),
+    rgb(0x067647), rgb(0xD1FADF), rgb(0xB42318), rgb(0xFEE4E2),
+    rgb(0x0B8FC0),
+    rgb(0xFEF3C7), rgb(0xB45309),
 };
 
 // An old-amp front panel: amber on near-black.
@@ -35,6 +41,9 @@ const Palette AMBER = {
     rgb(0x4A3510), rgb(0xFFC940),
     rgb(0x2A1E08), rgb(0x8A6200), rgb(0x8A6200), rgb(0xB42318), rgb(0xFFE0A0),
     rgb(0xFF5A1F),
+    rgb(0xFFC940), rgb(0x3A2A0A), rgb(0xFF8A65), rgb(0x4A1A0A),
+    rgb(0xFFB000),
+    rgb(0x4A3510), rgb(0xFFE08A),
 };
 
 }  // namespace

@@ -46,8 +46,8 @@ constexpr int16_t SCREEN_H = 320;
 constexpr int16_t PAD = 4;
 constexpr int16_t GAP = 4;
 
-constexpr int16_t STATUS_Y = 4,   STATUS_H = 24;
-constexpr int16_t NOW_Y    = 32,  NOW_H    = 68;
+constexpr int16_t STATUS_Y = 4,   STATUS_H = 30;
+constexpr int16_t NOW_Y    = 38,  NOW_H    = 62;
 constexpr int16_t MEDIA_Y  = 104, ROW_H    = 43;
 constexpr int16_t VOL_Y    = 151;
 constexpr int16_t TABS_Y   = 198, TABS_H   = 24;

@@ -133,4 +133,27 @@ void bolt(int16_t x, int16_t y, uint16_t fg) {
     tft.fillTriangle(x - 1, y - 1, x + 3, y - 1, x - 1, y + 5, fg);
 }
 
+void alpha(const uint8_t* a, uint8_t w, uint8_t h, int16_t x, int16_t y, uint16_t fg, uint16_t bg) {
+    const uint16_t fr = fg >> 11, fgc = (fg >> 5) & 0x3F, fb = fg & 0x1F;
+    const uint16_t br = bg >> 11, bgc = (bg >> 5) & 0x3F, bb = bg & 0x1F;
+    uint16_t line[32];
+    if (w > 32) return;
+    for (uint8_t row = 0; row < h; row++) {
+        for (uint8_t col = 0; col < w; col++) {
+            const uint16_t k = a[row * w + col], ik = 255 - k;
+            const uint16_t r = (fr * k + br * ik) / 255;
+            const uint16_t g = (fgc * k + bgc * ik) / 255;
+            const uint16_t b = (fb * k + bb * ik) / 255;
+            line[col] = (r << 11) | (g << 5) | b;
+        }
+        tft.setSwapBytes(true);
+        tft.pushImage(x, y + row, w, 1, line);
+        tft.setSwapBytes(false);
+    }
+}
+
+void alpha(const AlphaIcon& ic, int16_t cx, int16_t cy, uint16_t fg, uint16_t bg) {
+    alpha(ic.a, ic.w, ic.h, cx - ic.w / 2, cy - ic.h / 2, fg, bg);
+}
+
 }  // namespace Icons

@@ -18,6 +18,7 @@ Windows 11 PC over Bluetooth.
 | Settings: theme, brightness, dim, sleep | done |
 | Bluetooth to the PC: media keys, battery level in Windows | done |
 | Track title, artist, album art (tray app on the PC) | done |
+| Home Assistant page: 6 switches + blinds, over Wi-Fi | done |
 
 ## Hardware
 
@@ -94,6 +95,36 @@ volume overlay, so Spotify, browsers, foobar2000 and most players work.
 Windows may warn about an unknown app the first time: *More info → Run anyway*.
 
 Accented letters are shown without accents (the screen's fonts are ASCII).
+
+## Home Assistant page
+
+The house button at the top of the remote opens a page with up to six on/off
+buttons (lights, sockets, anything that turns on and off) and Down / Stop / Up
+for one set of blinds. The buttons show what Home Assistant says, and follow
+changes made elsewhere every few seconds.
+
+**Set-up:** copy [`sd-card/remote/ha.cfg.example`](sd-card/remote/ha.cfg.example)
+to `/remote/ha.cfg` on the SD card, fill in your Wi-Fi, Home Assistant's
+address and a long-lived access token, and list the entities. Copy the
+`icons` folder to `/remote/icons` as well. Then *Settings → Reload SD card*.
+
+**Checking it:** *Settings → Home Assistant* shows the Wi-Fi signal, whether
+Home Assistant answers (with a *Test connection* button), and for every
+entity whether Home Assistant knows it -- a typo in an entity ID shows as
+*Not found*.
+
+**Wi-Fi** is only on while the Home page (or its status screen) is open, and
+switches off again after the *Wi-Fi off* delay in Settings (at once, 30 s or
+2 min), or at once when the screen goes off. Opening the page takes a second
+or two to connect. `.local` addresses such as `homeassistant.local` work;
+an IP address connects slightly faster. Your real `ha.cfg` is in
+`.gitignore`, so it can't end up on GitHub by accident.
+
+**Icons** (names for `ha.cfg`):
+`bed-king` `ceiling-light-multiple` `ceiling-light` `chandelier` `coffee-maker` `desk-lamp` `desk` `fan` `fishbowl` `floor-lamp` `kettle` `lamp` `lamps` `led-strip-variant` `light-switch` `lightbulb-group` `lightbulb-outline` `lightbulb` `monitor` `outdoor-lamp` `pine-tree` `power-plug` `power-socket-eu` `power` `radiator` `sofa` `speaker` `spotlight-beam` `string-lights` `television` `track-light` `wall-sconce` `window-shutter`.
+They are [Material Design Icons](https://pictogrammers.com/library/mdi/)
+(Apache 2.0), the same set Home Assistant uses; `tools/make_icons.py` turns
+more of them into `.a8` files.
 
 ## Building and flashing
 

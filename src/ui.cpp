@@ -6,6 +6,7 @@
 #include "battery.h"
 #include "settings.h"
 #include "ble_link.h"
+#include "ha.h"
 #include <TFT_eSPI.h>
 
 extern TFT_eSPI tft;
@@ -15,24 +16,25 @@ namespace UI {
 Screen  screen = Screen::Main;
 uint8_t device = DEV_AMP;
 String  irStatus;
+int16_t scrollY = 0;
 
 namespace {
 
-const GFXfont* FONT      = &FreeSans9pt7b;
 const GFXfont* FONT_BOLD = &FreeSansBold9pt7b;
 
-// ---- Settings screen geometry ----
-constexpr int16_t SET_HDR_Y = 4,   SET_HDR_H = 28;
-constexpr int16_t SET_BT_Y  = 36,  SET_IR_Y = 84, SET_THEME_Y = 132, SET_ROW_H = 44;
-constexpr int16_t SET_PWR_LABEL_Y = 180;
-constexpr int16_t SET_PWR_Y = 199, SET_PWR_H = 34;
+// ---- Shared geometry ----
+constexpr int16_t HDR_Y = 4, HDR_H = 28;               // list screens' header
+constexpr int16_t LIST_Y = 36, LIST_H = SCREEN_H - LIST_Y;
+constexpr int16_t LIST_X = 4, LIST_W = 226;             // scrollbar at 235
+constexpr int16_t ROW_TALL = 44, ROW_SEG = 34, ROW_LABEL = 18;
 
 const char* THEME_NAMES[3] = { "Dark", "Light", "Amber" };
-const char* PWR_LABELS[3]  = { "Brightness", "Dim after", "Sleep after" };
-const char* PWR_OPTS[3][3] = {
+const char* PWR_LABELS[4]  = { "Brightness", "Dim after", "Sleep after", "Wi-Fi off" };
+const char* PWR_OPTS[4][3] = {
     { "Low", "Med", "High" },
     { "5 s", "15 s", "30 s" },
     { "1 min", "2 min", "5 min" },
+    { "At once", "30 s", "2 min" },
 };
 
 // Text that fits: cut with "..." when wider than maxW.
@@ -49,9 +51,28 @@ void button(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t fill, uint16_t 
     if (border != fill) tft.drawRoundRect(x, y, w, h, 7, border);
 }
 
-// ---- Remote screen ----
+bool in(int16_t px, int16_t py, int16_t x, int16_t y, int16_t w, int16_t h) {
+    return px >= x && px < x + w && py >= y && py < y + h;
+}
+
+void header(const char* title, int16_t h) {
+    const Palette& p = palette();
+    tft.fillRect(0, 0, SCREEN_W, HDR_Y + h + 2, p.bg);
+    tft.fillRoundRect(PAD, HDR_Y, 40, h, 6, p.raised);
+    Icons::back(PAD + 20, HDR_Y + h / 2, p.text);
+    tft.setFreeFont(FONT_BOLD);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(p.text, p.bg);
+    textFit(title, 52, HDR_Y + h / 2, 140);
+}
+
+// ===========================================================================
+// Remote screen
+// ===========================================================================
 
 constexpr int16_t ART_X = 6, ART_Y = NOW_Y + 4;
+constexpr int16_t TEXT_X = 66, TEXT_W = 168;
+constexpr int16_t HOME_X = 156, GEAR_X = 198, TOP_BTN_W = 38;
 
 void drawArt() {
     const Palette& p = palette();
@@ -62,23 +83,23 @@ void drawArt() {
     } else {
         tft.fillRect(ART_X, ART_Y, Ble::ART_W, Ble::ART_H, p.bg);
         tft.fillRoundRect(ART_X, ART_Y, Ble::ART_W, Ble::ART_H, 6, p.raised);
-        Icons::note(ART_X + 30, ART_Y + 30, p.textFaint);
+        Icons::note(ART_X + Ble::ART_W / 2, ART_Y + Ble::ART_H / 2, p.textFaint);
     }
 }
 
 // Three lines next to the cover: bold, dim, faint.
 void nowLines(const String& a, const String& b, const String& c) {
     const Palette& p = palette();
-    tft.fillRect(72, NOW_Y, SCREEN_W - 72, NOW_H, p.bg);
+    tft.fillRect(TEXT_X - 2, NOW_Y, SCREEN_W - TEXT_X + 2, NOW_H, p.bg);
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BOLD);
     tft.setTextColor(p.text, p.bg);
-    textFit(a, 74, NOW_Y + 10, 160);
+    textFit(a, TEXT_X, NOW_Y + 6, TEXT_W);
     tft.setTextFont(2);
     tft.setTextColor(p.textDim, p.bg);
-    textFit(b, 74, NOW_Y + 32, 160);
+    textFit(b, TEXT_X, NOW_Y + 27, TEXT_W);
     tft.setTextColor(p.textFaint, p.bg);
-    textFit(c, 74, NOW_Y + 48, 160);
+    textFit(c, TEXT_X, NOW_Y + 43, TEXT_W);
 }
 
 void drawNowText() {
@@ -119,62 +140,6 @@ void drawMedia(uint8_t i, bool pressed) {
     Icons::draw(ic, x + COL_W / 2, MEDIA_Y + ROW_H / 2, fg, fill, p.rec);
 }
 
-// ---- Bluetooth screen ----
-
-constexpr int16_t BT_STATUS_Y = 36, BT_FORGET_Y = 268, BT_FORGET_H = 44;
-
-void drawPairing() {
-    const Palette& p = palette();
-    tft.fillScreen(p.bg);
-    tft.fillRoundRect(PAD, SET_HDR_Y, 40, SET_HDR_H, 6, p.raised);
-    Icons::back(PAD + 20, SET_HDR_Y + SET_HDR_H / 2, p.text);
-    tft.setFreeFont(FONT_BOLD);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(p.text, p.bg);
-    tft.drawString("Bluetooth", 54, SET_HDR_Y + SET_HDR_H / 2);
-
-    // Status
-    const bool c = Ble::connected(), b = Ble::paired();
-    tft.fillRoundRect(PAD, BT_STATUS_Y, SCREEN_W - 2 * PAD, 44, 7, p.surface);
-    Icons::bluetooth(18, BT_STATUS_Y + 22, c ? p.bt : p.textFaint);
-    tft.setFreeFont(FONT_BOLD);
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextColor(p.text, p.surface);
-    tft.drawString(c ? "Connected" : b ? "Paired, not connected" : "Not paired", 32, BT_STATUS_Y + 6);
-    tft.setTextFont(2);
-    tft.setTextColor(p.textFaint, p.surface);
-    tft.drawString(c ? (Ble::appSeen() ? "Tray app running" : "Tray app not running")
-                     : "Visible as \"MultiRemote\"", 32, BT_STATUS_Y + 25);
-
-    // How to pair
-    const char* lines[] = {
-        "To pair with your Windows PC:",
-        "1. Settings > Bluetooth & devices",
-        "2. Add device > Bluetooth",
-        "3. Choose \"MultiRemote\"",
-        "",
-        "Media keys work straight away.",
-        "Run the tray app on the PC",
-        "for track info and covers.",
-    };
-    tft.setTextFont(2);
-    tft.setTextDatum(TL_DATUM);
-    int16_t y = 92;
-    for (const char* l : lines) {
-        tft.setTextColor(l == lines[0] ? p.text : p.textDim, p.bg);
-        tft.drawString(l, 10, y);
-        y += 20;
-    }
-
-    // Forget
-    tft.fillRoundRect(PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H, 7, b ? p.surface : p.bg);
-    tft.drawRoundRect(PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H, 7, p.border);
-    tft.setFreeFont(FONT_BOLD);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(b ? p.rec : p.border, b ? p.surface : p.bg);
-    tft.drawString("Forget paired PC", SCREEN_W / 2, BT_FORGET_Y + BT_FORGET_H / 2);
-}
-
 void drawVol(uint8_t i, bool pressed) {
     const Palette& p = palette();
     const int16_t x = colX(i);
@@ -206,7 +171,241 @@ void slotRect(uint8_t s, int16_t& x, int16_t& y) {
     y = GRID_Y + (s / 3) * (ROW_H + GAP);
 }
 
-// ---- Settings screen ----
+void drawTopButtons(bool homePressed, bool gearPressed) {
+    const Palette& p = palette();
+    const uint16_t hf = homePressed ? p.border : p.raised;
+    const uint16_t gf = gearPressed ? p.border : p.raised;
+    tft.fillRoundRect(HOME_X, STATUS_Y, TOP_BTN_W, STATUS_H, 7, hf);
+    Icons::alpha(ICON_HA_LOGO, HOME_X + TOP_BTN_W / 2, STATUS_Y + STATUS_H / 2, p.ha, hf);
+    tft.fillRoundRect(GEAR_X, STATUS_Y, TOP_BTN_W, STATUS_H, 7, gf);
+    Icons::gear(GEAR_X + TOP_BTN_W / 2, STATUS_Y + STATUS_H / 2, p.textDim, gf);
+}
+
+// ===========================================================================
+// Bluetooth screen
+// ===========================================================================
+
+constexpr int16_t BT_STATUS_Y = 36, BT_FORGET_Y = 268, BT_FORGET_H = 44;
+
+void drawPairing() {
+    const Palette& p = palette();
+    tft.fillScreen(p.bg);
+    header("Bluetooth", HDR_H);
+
+    const bool c = Ble::connected(), b = Ble::paired();
+    tft.fillRoundRect(PAD, BT_STATUS_Y, SCREEN_W - 2 * PAD, 44, 7, p.surface);
+    Icons::bluetooth(18, BT_STATUS_Y + 22, c ? p.bt : p.textFaint);
+    tft.setFreeFont(FONT_BOLD);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(p.text, p.surface);
+    tft.drawString(c ? "Connected" : b ? "Paired, not connected" : "Not paired", 32, BT_STATUS_Y + 6);
+    tft.setTextFont(2);
+    tft.setTextColor(p.textFaint, p.surface);
+    tft.drawString(c ? (Ble::appSeen() ? "Tray app running" : "Tray app not running")
+                     : "Visible as \"MultiRemote\"", 32, BT_STATUS_Y + 25);
+
+    const char* lines[] = {
+        "To pair with your Windows PC:",
+        "1. Settings > Bluetooth & devices",
+        "2. Add device > Bluetooth",
+        "3. Choose \"MultiRemote\"",
+        "",
+        "Media keys work straight away.",
+        "Run the tray app on the PC",
+        "for track info and covers.",
+    };
+    tft.setTextFont(2);
+    tft.setTextDatum(TL_DATUM);
+    int16_t y = 92;
+    for (const char* l : lines) {
+        tft.setTextColor(l == lines[0] ? p.text : p.textDim, p.bg);
+        tft.drawString(l, 10, y);
+        y += 20;
+    }
+
+    tft.fillRoundRect(PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H, 7, b ? p.surface : p.bg);
+    tft.drawRoundRect(PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H, 7, p.border);
+    tft.setFreeFont(FONT_BOLD);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(b ? p.rec : p.border, b ? p.surface : p.bg);
+    tft.drawString("Forget paired PC", SCREEN_W / 2, BT_FORGET_Y + BT_FORGET_H / 2);
+}
+
+// ===========================================================================
+// Home page (Home Assistant)
+// ===========================================================================
+
+constexpr int16_t HOME_HDR_H = 30;
+constexpr int16_t TILE_Y = 38, TILE_W = 114, TILE_H = 68;
+constexpr int16_t BLIND_LABEL_Y = 254, BLIND_Y = 272, BLIND_H = 44;
+
+int16_t tileX(uint8_t i) { return PAD + (i % 2) * (TILE_W + GAP); }
+int16_t tileY(uint8_t i) { return TILE_Y + (i / 2) * (TILE_H + GAP); }
+
+uint16_t netColor(const Palette& p) {
+    switch (Ha::net()) {
+    case Ha::Net::Online:     return p.okFg;
+    case Ha::Net::Off:
+    case Ha::Net::Connecting: return p.textFaint;
+    default:                  return p.errFg;
+    }
+}
+
+void drawHomeHeader() {
+    const Palette& p = palette();
+    header(Ha::title().c_str(), HOME_HDR_H);
+    const bool online = Ha::net() == Ha::Net::Online;
+    const uint16_t c = netColor(p);
+    tft.fillRect(186, HDR_Y, SCREEN_W - 186, HOME_HDR_H, p.bg);
+    Icons::alpha(online ? ICON_WIFI : ICON_WIFI_OFF, 202, HDR_Y + HOME_HDR_H / 2, c, p.bg);
+    tft.setTextFont(2);
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(p.textDim, p.bg);
+    tft.drawString("HA", SCREEN_W - 6, HDR_Y + HOME_HDR_H / 2);
+}
+
+// "on" -> true; "..." while we don't know.
+const char* tileState(const Ha::Live& v, bool& on, bool& known) {
+    on = false;
+    known = false;
+    if (Ha::net() != Ha::Net::Online || v.found == Ha::Found::Unknown) return "...";
+    if (v.found == Ha::Found::Missing) return "N/A";
+    if (!strcmp(v.state, "unavailable") || !strcmp(v.state, "unknown")) return "N/A";
+    known = true;
+    on = !strcmp(v.state, "on");
+    return on ? "On" : "Off";
+}
+
+void drawTile(uint8_t i, bool pressed) {
+    const Palette& p = palette();
+    const int16_t x = tileX(i), y = tileY(i);
+    tft.fillRect(x, y, TILE_W, TILE_H, p.bg);
+    if (i >= Ha::switchCount()) return;
+    const Ha::Item& it = Ha::item(i);
+    const Ha::Live v = Ha::live(i);
+    bool on, known;
+    const char* st = tileState(v, on, known);
+
+    const uint16_t fill = pressed ? p.border : on ? p.onBg : p.surface;
+    button(x, y, TILE_W, TILE_H, fill, on ? p.ir : p.border);
+    const uint16_t iconFg = on ? p.onFg : p.textFaint;
+    if (it.hasIcon) Icons::alpha(it.alpha, Ha::ICON_PX, Ha::ICON_PX, x + 8, y + 8, iconFg, fill);
+    else            Icons::alpha(ICON_FALLBACK.a, ICON_FALLBACK.w, ICON_FALLBACK.h, x + 8, y + 8, iconFg, fill);
+
+    tft.setTextFont(2);
+    tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(on ? p.onFg : p.textFaint, fill);
+    tft.drawString(st, x + TILE_W - 8, y + 7);
+
+    tft.setFreeFont(FONT_BOLD);
+    tft.setTextDatum(BL_DATUM);
+    tft.setTextColor(on ? p.text : (known ? p.textDim : p.textFaint), fill);
+    textFit(it.label, x + 8, y + TILE_H - 8, TILE_W - 16);
+}
+
+String blindText() {
+    const Ha::Live v = Ha::live(Ha::BLINDS);
+    if (Ha::net() != Ha::Net::Online || v.found == Ha::Found::Unknown) return "";
+    if (v.found == Ha::Found::Missing) return "Not found";
+    String s = v.state;
+    if (s == "unavailable" || s == "unknown") return "N/A";
+    if (s.length()) s.setCharAt(0, (char)toupper((unsigned char)s[0]));
+    if (v.position >= 0 && s != "Closed") s += " " + String(v.position) + "%";
+    return s;
+}
+
+void drawBlindLabel() {
+    const Palette& p = palette();
+    tft.fillRect(0, BLIND_LABEL_Y, SCREEN_W, BLIND_Y - BLIND_LABEL_Y, p.bg);
+    if (!Ha::hasBlinds()) return;
+    Icons::alpha(ICON_SHUTTER, PAD + 9, BLIND_LABEL_Y + 8, p.textDim, p.bg);
+    tft.setTextFont(2);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(p.textDim, p.bg);
+    textFit(Ha::item(Ha::BLINDS).label, PAD + 20, BLIND_LABEL_Y + 8, 120);
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(p.text, p.bg);
+    tft.drawString(blindText(), SCREEN_W - 6, BLIND_LABEL_Y + 8);
+}
+
+void drawBlindButton(uint8_t i, bool pressed) {
+    const Palette& p = palette();
+    const int16_t x = colX(i);
+    tft.fillRect(x, BLIND_Y, COL_W, BLIND_H, p.bg);
+    if (!Ha::hasBlinds()) return;
+    const uint16_t fill = pressed ? p.border : p.surface;
+    button(x, BLIND_Y, COL_W, BLIND_H, fill, p.border);
+    const AlphaIcon& ic = i == 0 ? ICON_ARROW_DOWN : i == 1 ? ICON_STOP : ICON_ARROW_UP;
+    Icons::alpha(ic, x + COL_W / 2, BLIND_Y + BLIND_H / 2, p.text, fill);
+}
+
+void drawHomeBody() {
+    const Palette& p = palette();
+    if (!Ha::configured()) {
+        tft.fillRect(0, TILE_Y, SCREEN_W, SCREEN_H - TILE_Y, p.bg);
+        tft.setTextDatum(MC_DATUM);
+        tft.setFreeFont(FONT_BOLD);
+        tft.setTextColor(p.text, p.bg);
+        tft.drawString("Not set up yet", SCREEN_W / 2, 120);
+        tft.setTextFont(2);
+        tft.setTextColor(p.errFg, p.bg);
+        tft.drawString(Ha::configError(), SCREEN_W / 2, 150);
+        tft.setTextColor(p.textDim, p.bg);
+        tft.drawString("Copy ha.cfg.example to", SCREEN_W / 2, 182);
+        tft.drawString("/remote/ha.cfg and fill it in", SCREEN_W / 2, 200);
+        return;
+    }
+    for (uint8_t i = 0; i < Ha::MAX_SWITCHES; i++) drawTile(i, false);
+    drawBlindLabel();
+    for (uint8_t i = 0; i < 3; i++) drawBlindButton(i, false);
+}
+
+void drawHome() {
+    tft.fillScreen(palette().bg);
+    drawHomeHeader();
+    drawHomeBody();
+}
+
+// ===========================================================================
+// Scrolling lists: Settings and Home Assistant status
+// ===========================================================================
+
+enum Row : uint8_t {
+    R_BT, R_HA, R_SD, R_THEME, R_PWRLABEL, R_PWR,                   // Settings
+    R_WIFI, R_HAINFO, R_TEST, R_CFG, R_ENTLABEL, R_ENT,            // HA status
+};
+struct RowDef { Row kind; uint8_t arg; int16_t h; };
+
+uint8_t buildRows(RowDef* r) {
+    uint8_t n = 0;
+    if (screen == Screen::Settings) {
+        r[n++] = { R_BT, 0, ROW_TALL };
+        r[n++] = { R_HA, 0, ROW_TALL };
+        r[n++] = { R_SD, 0, ROW_TALL };
+        r[n++] = { R_THEME, 0, ROW_TALL };
+        r[n++] = { R_PWRLABEL, 0, ROW_LABEL };
+        for (uint8_t i = 0; i < 4; i++) r[n++] = { R_PWR, i, ROW_SEG };
+    } else if (screen == Screen::HaStatus) {
+        r[n++] = { R_WIFI, 0, ROW_TALL };
+        r[n++] = { R_HAINFO, 0, ROW_TALL };
+        r[n++] = { R_TEST, 0, 40 };
+        r[n++] = { R_CFG, 0, ROW_LABEL };
+        if (Ha::configured()) {
+            r[n++] = { R_ENTLABEL, 0, ROW_LABEL };
+            for (uint8_t i = 0; i < Ha::switchCount(); i++) r[n++] = { R_ENT, i, ROW_SEG };
+            if (Ha::hasBlinds()) r[n++] = { R_ENT, Ha::BLINDS, ROW_SEG };
+        }
+    }
+    return n;
+}
+
+int16_t contentHeight() {
+    RowDef rows[16];
+    const uint8_t n = buildRows(rows);
+    int16_t h = 4;
+    for (uint8_t i = 0; i < n; i++) h += rows[i].h + (i ? GAP : 0);
+    return h;
+}
 
 void segments(int16_t x, int16_t y, int16_t w, int16_t h, const char* const* opts, uint8_t sel) {
     const Palette& p = palette();
@@ -224,107 +423,301 @@ void segments(int16_t x, int16_t y, int16_t w, int16_t h, const char* const* opt
     }
 }
 
-void settingsRow(int16_t y, bool bt, const char* title, const String& sub) {
+enum class RowIcon : uint8_t { Bt, Ha, File, Wifi };
+
+void card(int16_t y, int16_t h, RowIcon icon, uint16_t iconColor, const String& title,
+          const String& sub, uint16_t subColor, bool chevron) {
     const Palette& p = palette();
-    tft.fillRoundRect(PAD, y, SCREEN_W - 2 * PAD, SET_ROW_H, 7, p.surface);
-    if (bt) Icons::bluetooth(18, y + SET_ROW_H / 2, Ble::connected() ? p.bt : p.textFaint);
-    else    Icons::file(18, y + SET_ROW_H / 2, p.ir, p.surface);
+    tft.fillRoundRect(LIST_X, y, LIST_W, h, 7, p.surface);
+    const int16_t cy = y + h / 2;
+    switch (icon) {
+    case RowIcon::Bt:   Icons::bluetooth(LIST_X + 14, cy, iconColor); break;
+    case RowIcon::Ha:   Icons::alpha(ICON_HA_LOGO, LIST_X + 14, cy, iconColor, p.surface); break;
+    case RowIcon::File: Icons::file(LIST_X + 14, cy, iconColor, p.surface); break;
+    case RowIcon::Wifi: Icons::alpha(iconColor == p.okFg ? ICON_WIFI : ICON_WIFI_OFF, LIST_X + 14, cy, iconColor, p.surface); break;
+    }
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BOLD);
     tft.setTextColor(p.text, p.surface);
-    tft.drawString(title, 32, y + 6);
+    textFit(title, LIST_X + 30, y + 6, chevron ? 166 : 186);
     tft.setTextFont(2);
-    tft.setTextColor(p.textFaint, p.surface);
-    textFit(sub, 32, y + 25, 180);
-    Icons::chevron(SCREEN_W - 16, y + SET_ROW_H / 2, p.textFaint);
+    tft.setTextColor(subColor, p.surface);
+    textFit(sub, LIST_X + 30, y + 25, chevron ? 166 : 186);
+    if (chevron) Icons::chevron(LIST_X + LIST_W - 12, cy, p.textFaint);
 }
 
-void drawThemeRow() {
-    const Palette& p = palette();
-    tft.fillRoundRect(PAD, SET_THEME_Y, SCREEN_W - 2 * PAD, SET_ROW_H, 7, p.surface);
-    tft.setFreeFont(FONT_BOLD);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(p.text, p.surface);
-    tft.drawString("Theme", 12, SET_THEME_Y + SET_ROW_H / 2);
-    segments(70, SET_THEME_Y + 7, 162, 30, THEME_NAMES, Store::s.theme);
+String batteryText() {
+    if (!Battery::present()) return "No battery";
+    const uint16_t mv = Battery::millivolts();
+    String s = String(mv / 1000) + "." + String((mv % 1000) / 100) + String((mv % 100) / 10) + " V";
+    s += Battery::external() ? "  USB power" : "  " + String(Battery::percent()) + "%";
+    return s;
 }
 
-void drawPowerRow(uint8_t r) {
+void labelRow(int16_t y, const String& left, const String& right, uint16_t rightColor) {
     const Palette& p = palette();
-    const int16_t y = SET_PWR_Y + r * (SET_PWR_H + GAP);
-    tft.fillRect(0, y, SCREEN_W, SET_PWR_H, p.bg);
     tft.setTextFont(2);
     tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(p.text, p.bg);
-    tft.drawString(PWR_LABELS[r], 8, y + SET_PWR_H / 2);
-    const uint8_t sel = r == 0 ? Store::s.brightness : r == 1 ? Store::s.dimAfter : Store::s.sleepAfter;
-    segments(78, y + 2, 158, 30, PWR_OPTS[r], sel);
-}
-
-void drawSettings() {
-    const Palette& p = palette();
-    tft.fillScreen(p.bg);
-    // Header
-    tft.fillRoundRect(PAD, SET_HDR_Y, 40, SET_HDR_H, 6, p.raised);
-    Icons::back(PAD + 20, SET_HDR_Y + SET_HDR_H / 2, p.text);
-    tft.setFreeFont(FONT_BOLD);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(p.text, p.bg);
-    tft.drawString("Settings", 54, SET_HDR_Y + SET_HDR_H / 2);
-    // Which build this is: the commit it was built from.
-    tft.setTextFont(1);
+    tft.setTextColor(p.textFaint, p.bg);
+    tft.drawString(left, LIST_X + 4, y + ROW_LABEL / 2 + 1);
     tft.setTextDatum(MR_DATUM);
-    tft.setTextColor(p.textFaint, p.bg);
-    tft.drawString("build " FW_VERSION, SCREEN_W - 8, SET_HDR_Y + SET_HDR_H / 2);
-
-    settingsRow(SET_BT_Y, true, "Bluetooth pairing",
-                Ble::connected() ? "Connected to PC" : Ble::paired() ? "Paired, PC not connected" : "Not paired yet");
-    settingsRow(SET_IR_Y, false, "Load .ir files", irStatus);
-    drawThemeRow();
-
-    tft.setTextFont(2);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(p.textFaint, p.bg);
-    tft.drawString("Power saving", 8, SET_PWR_LABEL_Y + 8);
-    drawBatteryInfo();
-    for (uint8_t r = 0; r < 3; r++) drawPowerRow(r);
+    tft.setTextColor(rightColor, p.bg);
+    tft.drawString(right, LIST_X + LIST_W - 2, y + ROW_LABEL / 2 + 1);
 }
 
-bool in(int16_t px, int16_t py, int16_t x, int16_t y, int16_t w, int16_t h) {
-    return px >= x && px < x + w && py >= y && py < y + h;
+String haRowSub() {
+    if (!Ha::configured()) return Ha::configError();
+    String s = Ha::ssid() + ", " + String(Ha::switchCount()) + " switch";
+    if (Ha::switchCount() != 1) s += "es";
+    if (Ha::hasBlinds()) s += ", 1 blind";
+    return s;
+}
+
+String entityBadge(uint8_t i, uint16_t& fg, uint16_t& bg) {
+    const Palette& p = palette();
+    const Ha::Live v = Ha::live(i);
+    if (Ha::net() != Ha::Net::Online || v.found == Ha::Found::Unknown) {
+        fg = p.textFaint; bg = p.raised;
+        return "...";
+    }
+    if (v.found == Ha::Found::Missing) {
+        fg = p.errFg; bg = p.errBg;
+        return "Not found";
+    }
+    fg = p.okFg; bg = p.okBg;
+    String s = v.state;
+    if (s.length()) s.setCharAt(0, (char)toupper((unsigned char)s[0]));
+    if (i == Ha::BLINDS && v.position >= 0) s += " " + String(v.position) + "%";
+    return s;
+}
+
+void drawRow(const RowDef& r, int16_t y) {
+    const Palette& p = palette();
+    tft.fillRect(0, y, SCREEN_W - 6, r.h, p.bg);
+    switch (r.kind) {
+    case R_BT:
+        card(y, r.h, RowIcon::Bt, Ble::connected() ? p.bt : p.textFaint, "Bluetooth pairing",
+             Ble::connected() ? "Connected to PC" : Ble::paired() ? "Paired, PC not connected" : "Not paired yet",
+             p.textFaint, true);
+        break;
+    case R_HA:
+        card(y, r.h, RowIcon::Ha, Ha::configured() ? p.ha : p.textFaint, "Home Assistant", haRowSub(),
+             Ha::configured() ? p.textFaint : p.errFg, true);
+        break;
+    case R_SD:
+        card(y, r.h, RowIcon::File, p.ir, "Reload SD card", irStatus, p.textFaint, true);
+        break;
+    case R_THEME:
+        tft.fillRoundRect(LIST_X, y, LIST_W, r.h, 7, p.surface);
+        tft.setFreeFont(FONT_BOLD);
+        tft.setTextDatum(ML_DATUM);
+        tft.setTextColor(p.text, p.surface);
+        tft.drawString("Theme", LIST_X + 8, y + r.h / 2);
+        segments(70, y + 7, 156, 30, THEME_NAMES, Store::s.theme);
+        break;
+    case R_PWRLABEL:
+        labelRow(y, "Power saving", batteryText(), p.textFaint);
+        break;
+    case R_PWR: {
+        tft.setTextFont(2);
+        tft.setTextDatum(ML_DATUM);
+        tft.setTextColor(p.text, p.bg);
+        tft.drawString(PWR_LABELS[r.arg], LIST_X + 4, y + r.h / 2);
+        const uint8_t sel = r.arg == 0 ? Store::s.brightness : r.arg == 1 ? Store::s.dimAfter
+                          : r.arg == 2 ? Store::s.sleepAfter : Store::s.wifiOff;
+        segments(80, y + 2, 148, 30, PWR_OPTS[r.arg], sel);
+        break;
+    }
+    case R_WIFI: {
+        const Ha::Net n = Ha::net();
+        const bool up = n == Ha::Net::Online || n == Ha::Net::NoHa || n == Ha::Net::BadToken;
+        String sub;
+        if (up) {
+            const int8_t dbm = Ha::rssi();
+            sub = String(dbm > -60 ? "Signal good" : dbm > -70 ? "Signal fair" : "Signal weak") +
+                  " (" + String(dbm) + " dBm), " + Ha::ip();
+        } else {
+            sub = n == Ha::Net::Connecting ? "Connecting..." : n == Ha::Net::NoWifi ? "Not found or wrong password" : "Off";
+        }
+        card(y, r.h, RowIcon::Wifi, up ? p.okFg : n == Ha::Net::NoWifi ? p.errFg : p.textFaint,
+             Ha::ssid().length() ? Ha::ssid() : String("Wi-Fi"), sub, up ? p.textFaint : n == Ha::Net::NoWifi ? p.errFg : p.textFaint, false);
+        break;
+    }
+    case R_HAINFO: {
+        const Ha::Net n = Ha::net();
+        String sub = Ha::netText();
+        if (n == Ha::Net::Online && Ha::version().length()) sub += ", HA " + Ha::version();
+        card(y, r.h, RowIcon::Ha, p.ha, Ha::url().length() ? Ha::url() : String("No address"), sub, netColor(p), false);
+        break;
+    }
+    case R_TEST: {
+        const int32_t ms = Ha::testResultMs();
+        String label = Ha::testing() ? "Testing..." : ms >= 0 ? "Answered in " + String(ms) + " ms"
+                     : ms == -2 ? "No answer - tap to retry" : "Test connection";
+        button(LIST_X, y, LIST_W, r.h, p.raised, p.border);
+        tft.setFreeFont(FONT_BOLD);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(ms == -2 ? p.errFg : p.text, p.raised);
+        tft.drawString(label, LIST_X + LIST_W / 2, y + r.h / 2);
+        break;
+    }
+    case R_CFG:
+        labelRow(y, "Config file", Ha::configured() ? "/remote/ha.cfg, loaded" : Ha::configError(),
+                 Ha::configured() ? p.textFaint : p.errFg);
+        break;
+    case R_ENTLABEL: {
+        uint8_t ok = 0, bad = 0, total = Ha::switchCount() + (Ha::hasBlinds() ? 1 : 0);
+        for (uint8_t i = 0; i < Ha::switchCount(); i++) {
+            const Ha::Found f = Ha::live(i).found;
+            ok += f == Ha::Found::Ok; bad += f == Ha::Found::Missing;
+        }
+        if (Ha::hasBlinds()) {
+            const Ha::Found f = Ha::live(Ha::BLINDS).found;
+            ok += f == Ha::Found::Ok; bad += f == Ha::Found::Missing;
+        }
+        String right = bad ? String(ok) + " OK, " + String(bad) + " not found"
+                     : ok == total ? "all " + String(total) + " OK" : String("");
+        labelRow(y, "Entities", right, bad ? p.errFg : p.textFaint);
+        break;
+    }
+    case R_ENT: {
+        const Ha::Item& it = Ha::item(r.arg);
+        tft.fillRoundRect(LIST_X, y, LIST_W, r.h, 6, p.surface);
+        uint16_t bfg, bbg;
+        const String badge = entityBadge(r.arg, bfg, bbg);
+        tft.setTextFont(2);
+        const int16_t bw = tft.textWidth(badge) + 12;
+        tft.fillRoundRect(LIST_X + LIST_W - bw - 6, y + 8, bw, 18, 4, bbg);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(bfg, bbg);
+        tft.drawString(badge, LIST_X + LIST_W - 6 - bw / 2, y + 17);
+        const int16_t tw = LIST_W - bw - 22;
+        tft.setTextDatum(TL_DATUM);
+        tft.setTextColor(p.text, p.surface);
+        textFit(it.label, LIST_X + 8, y + 3, tw);
+        tft.setTextFont(1);
+        tft.setTextColor(p.textFaint, p.surface);
+        textFit(it.id, LIST_X + 8, y + 22, tw);
+        break;
+    }
+    }
+}
+
+void drawScrollbar() {
+    const Palette& p = palette();
+    tft.fillRect(SCREEN_W - 6, LIST_Y, 6, LIST_H, p.bg);
+    const int16_t total = contentHeight();
+    if (total <= LIST_H) return;
+    const int16_t th = max<int16_t>(20, (int32_t)LIST_H * LIST_H / total);
+    const int16_t ty = LIST_Y + (int32_t)scrollY * (LIST_H - th) / (total - LIST_H);
+    tft.fillRoundRect(SCREEN_W - 5, ty, 3, th, 1, p.border);
+}
+
+void drawList() {
+    const Palette& p = palette();
+    RowDef rows[16];
+    const uint8_t n = buildRows(rows);
+    tft.setViewport(0, LIST_Y, SCREEN_W, LIST_H, false);   // clip to the list
+    int16_t y = LIST_Y - scrollY, prevBottom = LIST_Y;
+    for (uint8_t i = 0; i < n; i++) {
+        if (y > prevBottom) tft.fillRect(0, prevBottom, SCREEN_W - 6, y - prevBottom, p.bg);
+        if (y + rows[i].h > LIST_Y && y < SCREEN_H) drawRow(rows[i], y);
+        prevBottom = y + rows[i].h;
+        y += rows[i].h + GAP;
+    }
+    if (prevBottom < SCREEN_H) tft.fillRect(0, max(prevBottom, LIST_Y), SCREEN_W - 6, SCREEN_H - max(prevBottom, LIST_Y), p.bg);
+    drawScrollbar();
+    tft.resetViewport();
+}
+
+// Redraw one kind of row in place (e.g. the voltage) if it is on screen.
+void drawRowKind(Row kind) {
+    RowDef rows[16];
+    const uint8_t n = buildRows(rows);
+    int16_t y = LIST_Y - scrollY;
+    tft.setViewport(0, LIST_Y, SCREEN_W, LIST_H, false);
+    for (uint8_t i = 0; i < n; i++) {
+        if (rows[i].kind == kind && y + rows[i].h > LIST_Y && y < SCREEN_H) drawRow(rows[i], y);
+        y += rows[i].h + GAP;
+    }
+    tft.resetViewport();
+}
+
+void drawListScreen() {
+    tft.fillScreen(palette().bg);
+    if (screen == Screen::Settings) {
+        header("Settings", HDR_H);
+        const Palette& p = palette();
+        tft.setTextFont(1);
+        tft.setTextDatum(MR_DATUM);
+        tft.setTextColor(p.textFaint, p.bg);
+        tft.drawString("build " FW_VERSION, SCREEN_W - 8, HDR_Y + HDR_H / 2);
+    } else {
+        header("Home Assistant", HDR_H);
+    }
+    scrollY = constrain(scrollY, 0, scrollMax());
+    drawList();
+}
+
+Target hitList(int16_t x, int16_t y) {
+    Target t;
+    if (y < LIST_Y) return t;
+    RowDef rows[16];
+    const uint8_t n = buildRows(rows);
+    const int16_t cy = y - LIST_Y + scrollY;
+    int16_t top = 0;
+    for (uint8_t i = 0; i < n; i++) {
+        const RowDef& r = rows[i];
+        if (cy >= top && cy < top + r.h) {
+            const int16_t sy = LIST_Y + top - scrollY;
+            auto set = [&](Hit h, uint8_t arg) { t.hit = h; t.arg = arg; t.x = LIST_X; t.y = sy; t.w = LIST_W; t.h = r.h; };
+            auto seg = [&](Hit h, int16_t sx, int16_t sw) {
+                if (x >= sx && x < sx + sw) set(h, (uint8_t)min(2, (x - sx) * 3 / sw));
+            };
+            switch (r.kind) {
+            case R_BT:    set(Hit::Pairing, 0); break;
+            case R_HA:    set(Hit::HaRow, 0); break;
+            case R_SD:    set(Hit::LoadIr, 0); break;
+            case R_THEME: seg(Hit::Theme, 70, 156); break;
+            case R_PWR:   seg((Hit)((uint8_t)Hit::Brightness + r.arg), 80, 148); break;
+            case R_TEST:  set(Hit::HaTest, 0); break;
+            default: break;
+            }
+            return t;
+        }
+        top += r.h + GAP;
+    }
+    return t;
 }
 
 }  // namespace
 
-// ---- Public ----------------------------------------------------------------
+// ===========================================================================
+// Public
+// ===========================================================================
 
-// Right of the "Power saving" label: what BAT+ measures, and whether that
-// counts as the charger's input power.
+bool scrollable() { return screen == Screen::Settings || screen == Screen::HaStatus; }
+
+int16_t scrollMax() { return max<int16_t>(0, contentHeight() - LIST_H); }
+
+void scrollTo(int16_t y) {
+    y = constrain(y, 0, scrollMax());
+    if (y == scrollY) return;
+    scrollY = y;
+    drawList();
+}
+
 void drawBatteryInfo() {
-    if (screen != Screen::Settings) return;
-    const Palette& p = palette();
-    tft.fillRect(110, SET_PWR_LABEL_Y, SCREEN_W - 110, 18, p.bg);
-    String s;
-    if (!Battery::present()) {
-        s = "No battery";
-    } else {
-        const uint16_t mv = Battery::millivolts();
-        s = String(mv / 1000) + "." + String((mv % 1000) / 100) + String((mv % 100) / 10) + " V";
-        s += Battery::external() ? "  USB power" : "  " + String(Battery::percent()) + "%";
-    }
-    tft.setTextFont(2);
-    tft.setTextDatum(MR_DATUM);
-    tft.setTextColor(p.textFaint, p.bg);
-    tft.drawString(s, SCREEN_W - 8, SET_PWR_LABEL_Y + 8);
+    if (screen == Screen::Settings) drawRowKind(R_PWRLABEL);
 }
 
 void drawStatus() {
     if (screen != Screen::Main) return;
     const Palette& p = palette();
-    tft.fillRect(0, STATUS_Y, SCREEN_W, STATUS_H, p.bg);
+    tft.fillRect(0, STATUS_Y, HOME_X, STATUS_H, p.bg);
     Icons::bluetooth(9, STATUS_Y + STATUS_H / 2, Ble::connected() ? p.bt : p.textFaint);
 
-    const int16_t bx = 18, by = STATUS_Y + 5, bw = 182, bh = 14;
+    const int16_t bx = 18, by = STATUS_Y + 7, bw = HOME_X - bx - 6, bh = 16;
     tft.fillRoundRect(bx, by, bw, bh, 4, p.battTrack);
     String txt;
     if (!Battery::present()) {
@@ -341,9 +734,6 @@ void drawStatus() {
     tft.setTextDatum(MC_DATUM);
     tft.setTextColor(p.battText);   // transparent: drawn over bar and track
     tft.drawString(txt, bx + bw / 2, by + bh / 2 + 1);
-
-    tft.fillRoundRect(204, STATUS_Y, 32, STATUS_H, 6, p.raised);
-    Icons::gear(220, STATUS_Y + STATUS_H / 2, p.textDim, p.raised);
 }
 
 void drawSlot(uint8_t s, bool pressed) {
@@ -390,16 +780,16 @@ void drawTabsAndPanel() {
 }
 
 void drawScreen() {
-    if (screen == Screen::Settings) {
-        drawSettings();
-        return;
-    }
-    if (screen == Screen::Pairing) {
-        drawPairing();
-        return;
+    switch (screen) {
+    case Screen::Settings:
+    case Screen::HaStatus: drawListScreen(); return;
+    case Screen::Pairing:  drawPairing(); return;
+    case Screen::Home:     drawHome(); return;
+    case Screen::Main:     break;
     }
     tft.fillScreen(palette().bg);
     drawStatus();
+    drawTopButtons(false, false);
     drawNowPlaying();
     for (uint8_t i = 0; i < 3; i++) drawMedia(i, false);
     for (uint8_t i = 0; i < 3; i++) drawVol(i, false);
@@ -408,6 +798,8 @@ void drawScreen() {
 
 void drawTarget(const Target& t, bool pressed) {
     switch (t.hit) {
+    case Hit::HomeBtn:   drawTopButtons(pressed, false); break;
+    case Hit::Gear:      drawTopButtons(false, pressed); break;
     case Hit::MediaPrev: drawMedia(0, pressed); break;
     case Hit::MediaPlay: drawMedia(1, pressed); break;
     case Hit::MediaNext: drawMedia(2, pressed); break;
@@ -415,10 +807,14 @@ void drawTarget(const Target& t, bool pressed) {
     case Hit::VolUp:     drawVol(1, pressed); break;
     case Hit::Mute:      drawVol(2, pressed); break;
     case Hit::Slot:      drawSlot(t.arg, pressed); break;
-    case Hit::Theme:     drawThemeRow(); break;
-    case Hit::Brightness: drawPowerRow(0); break;
-    case Hit::DimAfter:   drawPowerRow(1); break;
-    case Hit::SleepAfter: drawPowerRow(2); break;
+    case Hit::HomeTile:  drawTile(t.arg, pressed); break;
+    case Hit::Blind:     drawBlindButton(t.arg, pressed); break;
+    case Hit::Theme:      if (!pressed) drawRowKind(R_THEME); break;
+    case Hit::Brightness:
+    case Hit::DimAfter:
+    case Hit::SleepAfter:
+    case Hit::WifiOff:    if (!pressed) drawRowKind(R_PWR); break;
+    case Hit::HaTest:     if (!pressed) drawRowKind(R_TEST); break;
     default: break;
     }
 }
@@ -434,14 +830,37 @@ void onBle(uint8_t ch) {
             drawNowText();
             drawMedia(1, false);
         }
-    } else if (ch & (Ble::CH_LINK | Ble::CH_META)) {
-        drawScreen();   // Settings / Bluetooth show the connection state
+    } else if (screen == Screen::Pairing && (ch & (Ble::CH_LINK | Ble::CH_META))) {
+        drawPairing();
+    } else if (screen == Screen::Settings && (ch & Ble::CH_LINK)) {
+        drawRowKind(R_BT);
+    }
+}
+
+void onHa(uint8_t ch) {
+    switch (screen) {
+    case Screen::Home:
+        if (ch & Ha::CH_NET) drawHomeHeader();
+        if (ch & (Ha::CH_NET | Ha::CH_STATE)) {
+            if (!Ha::configured()) { drawHomeBody(); break; }
+            for (uint8_t i = 0; i < Ha::switchCount(); i++) drawTile(i, false);
+            drawBlindLabel();
+        }
+        break;
+    case Screen::HaStatus:
+        drawList();
+        break;
+    case Screen::Settings:
+        if (ch & Ha::CH_NET) drawRowKind(R_HA);
+        break;
+    default:
+        break;
     }
 }
 
 void message(const char* text) {
     const Palette& p = palette();
-    const int16_t y = screen == Screen::Main ? GRID_Y + 30 : screen == Screen::Pairing ? 230 : SET_IR_Y + 8;
+    const int16_t y = screen == Screen::Main ? GRID_Y + 30 : screen == Screen::Pairing ? 230 : 140;
     tft.fillRoundRect(20, y, SCREEN_W - 40, 30, 7, p.raised);
     tft.setTextFont(2);
     tft.setTextDatum(MC_DATUM);
@@ -454,9 +873,12 @@ Target hitTest(int16_t x, int16_t y) {
     auto set = [&](Hit h, uint8_t arg, int16_t rx, int16_t ry, int16_t rw, int16_t rh) {
         t.hit = h; t.arg = arg; t.x = rx; t.y = ry; t.w = rw; t.h = rh;
     };
+    const bool inHeader = y < HDR_Y + HOME_HDR_H + 2;
 
-    if (screen == Screen::Main) {
-        if (in(x, y, 196, 0, 44, STATUS_Y + STATUS_H + 2)) { set(Hit::Gear, 0, 204, STATUS_Y, 32, STATUS_H); return t; }
+    switch (screen) {
+    case Screen::Main: {
+        if (in(x, y, GEAR_X - 4, 0, SCREEN_W - GEAR_X + 4, STATUS_Y + STATUS_H + 2)) { set(Hit::Gear, 0, GEAR_X, STATUS_Y, TOP_BTN_W, STATUS_H); return t; }
+        if (in(x, y, HOME_X - 4, 0, TOP_BTN_W + 6, STATUS_Y + STATUS_H + 2)) { set(Hit::HomeBtn, 0, HOME_X, STATUS_Y, TOP_BTN_W, STATUS_H); return t; }
         for (uint8_t i = 0; i < 3; i++) {
             const int16_t cx = colX(i);
             if (in(x, y, cx, MEDIA_Y, COL_W, ROW_H)) { set((Hit)((uint8_t)Hit::MediaPrev + i), i, cx, MEDIA_Y, COL_W, ROW_H); return t; }
@@ -474,27 +896,26 @@ Target hitTest(int16_t x, int16_t y) {
         }
         return t;
     }
-
-    if (screen == Screen::Pairing) {
-        if (in(x, y, 0, 0, 60, SET_HDR_Y + SET_HDR_H + 2)) { set(Hit::Back, 0, PAD, SET_HDR_Y, 40, SET_HDR_H); return t; }
+    case Screen::Pairing:
+        if (inHeader && x < 60) { set(Hit::Back, 0, PAD, HDR_Y, 40, HDR_H); return t; }
         if (in(x, y, PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H)) { set(Hit::Forget, 0, PAD, BT_FORGET_Y, SCREEN_W - 2 * PAD, BT_FORGET_H); return t; }
         return t;
-    }
-
-    // Settings
-    if (in(x, y, 0, 0, 60, SET_HDR_Y + SET_HDR_H + 2)) { set(Hit::Back, 0, PAD, SET_HDR_Y, 40, SET_HDR_H); return t; }
-    if (in(x, y, PAD, SET_BT_Y, SCREEN_W - 2 * PAD, SET_ROW_H)) { set(Hit::Pairing, 0, PAD, SET_BT_Y, SCREEN_W - 2 * PAD, SET_ROW_H); return t; }
-    if (in(x, y, PAD, SET_IR_Y, SCREEN_W - 2 * PAD, SET_ROW_H)) { set(Hit::LoadIr, 0, PAD, SET_IR_Y, SCREEN_W - 2 * PAD, SET_ROW_H); return t; }
-    // Segmented controls: which third of the control.
-    auto seg = [&](Hit h, int16_t sx, int16_t sy, int16_t sw, int16_t sh) {
-        if (!in(x, y, sx, sy, sw, sh)) return false;
-        set(h, (uint8_t)min(2, (x - sx) * 3 / sw), sx, sy, sw, sh);
-        return true;
-    };
-    if (seg(Hit::Theme, 70, SET_THEME_Y, 166, SET_ROW_H)) return t;
-    for (uint8_t r = 0; r < 3; r++) {
-        const int16_t ry = SET_PWR_Y + r * (SET_PWR_H + GAP);
-        if (seg((Hit)((uint8_t)Hit::Brightness + r), 78, ry, 158, SET_PWR_H)) return t;
+    case Screen::Home:
+        if (inHeader && x < 60) { set(Hit::Back, 0, PAD, HDR_Y, 40, HOME_HDR_H); return t; }
+        if (!Ha::configured()) return t;
+        for (uint8_t i = 0; i < Ha::switchCount(); i++)
+            if (in(x, y, tileX(i), tileY(i), TILE_W, TILE_H)) { set(Hit::HomeTile, i, tileX(i), tileY(i), TILE_W, TILE_H); return t; }
+        if (Ha::hasBlinds())
+            for (uint8_t i = 0; i < 3; i++)
+                if (in(x, y, colX(i), BLIND_Y, COL_W, BLIND_H)) { set(Hit::Blind, i, colX(i), BLIND_Y, COL_W, BLIND_H); return t; }
+        return t;
+    case Screen::Settings:
+    case Screen::HaStatus:
+        if (y < LIST_Y) {
+            if (x < 60) set(Hit::Back, 0, PAD, HDR_Y, 40, HDR_H);
+            return t;
+        }
+        return hitList(x, y);
     }
     return t;
 }

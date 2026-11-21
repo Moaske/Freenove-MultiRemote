@@ -1,0 +1,33 @@
+# Home Assistant page of the MultiRemote.
+# Copy this file to /remote/ha.cfg on the SD card and fill it in.
+# Lines starting with # are ignored. Then: Settings > Reload SD card.
+
+# Your Wi-Fi (2.4 GHz; the ESP32 has no 5 GHz)
+wifi_ssid = [your network name]
+wifi_password = [your Wi-Fi password]
+
+# Home Assistant: its address as you type it in a browser.
+# An IP address (http://192.168.1.10:8123) connects a little faster than a
+# .local name, and keeps working if mDNS acts up.
+ha_url = http://homeassistant.local:8123
+
+# A long-lived access token: in Home Assistant, click your name (bottom left)
+# > Security > Long-lived access tokens > Create token. Anyone with this SD
+# card can use it, so consider a separate HA user for the remote.
+ha_token = [paste the token here]
+
+# The title at the top of the page.
+title = Casa Moaske
+
+# Up to 6 on/off buttons:  switch = entity_id, label, icon
+# The icon is a file name from /remote/icons (without .a8); leave it out for
+# a light bulb. Lights, switches, plugs, fans, input_booleans all work.
+switch = light.ceiling, Ceiling light, ceiling-light
+switch = light.floor_lamp, Floor lamp, floor-lamp
+switch = light.reading_lamp, Reading lamp, desk-lamp
+switch = switch.amp_socket, Amp socket, power-socket-eu
+switch = switch.string_lights, String lights, string-lights
+switch = switch.tv_socket, TV socket, television
+
+# One set of blinds (a cover in Home Assistant): Down / Stop / Up.
+blinds = cover.living_room, Blinds

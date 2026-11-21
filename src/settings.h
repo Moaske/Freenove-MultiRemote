@@ -9,6 +9,7 @@ struct Settings {
     uint8_t brightness = 1;   // 0 Low, 1 Med, 2 High
     uint8_t dimAfter   = 1;   // 0 5 s, 1 15 s, 2 30 s
     uint8_t sleepAfter = 1;   // 0 1 min, 1 2 min, 2 5 min
+    uint8_t wifiOff    = 1;   // after leaving Home: 0 at once, 1 30 s, 2 2 min
 
     // Touch calibration: screen = affine(raw). Valid when calOk.
     bool  calOk = false;
@@ -23,4 +24,5 @@ namespace Store {
     uint8_t  brightnessPwm();   // backlight duty for the chosen level
     uint32_t dimAfterMs();
     uint32_t sleepAfterMs();
+    uint32_t wifiOffAfterMs();
 }
