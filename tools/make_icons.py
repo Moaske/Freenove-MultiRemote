@@ -24,12 +24,11 @@ from PIL import Image, ImageDraw, ImageFont
 # Icons you can give a Home page button (by these names, in ha.cfg).
 LIBRARY = [
     "lightbulb", "lightbulb-outline", "lightbulb-group", "ceiling-light",
-    "ceiling-light-multiple", "floor-lamp", "desk-lamp", "lamp", "lamps",
-    "string-lights", "led-strip-variant", "wall-sconce", "chandelier",
+    "ceiling-light-multiple", "globe-light", "floor-lamp", "desk-lamp", "lamp",
+    "lamps", "string-lights", "led-strip-variant", "wall-sconce", "chandelier",
     "track-light", "spotlight-beam", "outdoor-lamp", "pine-tree",
     "light-switch", "power-socket-eu", "power-plug", "power", "television",
-    "monitor", "speaker", "fan", "coffee-maker", "kettle", "radiator",
-    "fishbowl", "sofa", "bed-king", "desk", "window-shutter",
+    "speaker", "window-shutter", "roller-shade",
 ]
 
 # Built into the firmware: (icon, size in px, C name).

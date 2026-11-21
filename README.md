@@ -122,7 +122,7 @@ an IP address connects slightly faster. Your real `ha.cfg` is in
 
 **Icons:** use the name under the icon in `ha.cfg`.
 
-![The 33 icons with their names](docs/icons.png)
+![The icons with their names](docs/icons.png)
 
 They are [Material Design Icons](https://pictogrammers.com/library/mdi/)
 (Apache 2.0), the same set Home Assistant uses; `tools/make_icons.py` turns
