@@ -24,8 +24,8 @@ const GFXfont* FONT_BOLD = &FreeSansBold9pt7b;
 
 // ---- Shared geometry ----
 constexpr int16_t HDR_Y = 4, HDR_H = 28;               // list screens' header
-constexpr int16_t LIST_Y = 36, LIST_H = SCREEN_H - LIST_Y;
-constexpr int16_t LIST_X = 4, LIST_W = 226;             // scrollbar at 235
+constexpr int16_t LST_TOP = 36, LST_HEIGHT = SCREEN_H - LST_TOP;
+constexpr int16_t LST_LEFT = 4, LST_WIDTH = 226;             // scrollbar at 235
 constexpr int16_t ROW_TALL = 44, ROW_SEG = 34, ROW_LABEL = 18;
 
 const char* THEME_NAMES[3] = { "Dark", "Light", "Amber" };
@@ -428,22 +428,22 @@ enum class RowIcon : uint8_t { Bt, Ha, File, Wifi };
 void card(int16_t y, int16_t h, RowIcon icon, uint16_t iconColor, const String& title,
           const String& sub, uint16_t subColor, bool chevron) {
     const Palette& p = palette();
-    tft.fillRoundRect(LIST_X, y, LIST_W, h, 7, p.surface);
+    tft.fillRoundRect(LST_LEFT, y, LST_WIDTH, h, 7, p.surface);
     const int16_t cy = y + h / 2;
     switch (icon) {
-    case RowIcon::Bt:   Icons::bluetooth(LIST_X + 14, cy, iconColor); break;
-    case RowIcon::Ha:   Icons::alpha(ICON_HA_LOGO, LIST_X + 14, cy, iconColor, p.surface); break;
-    case RowIcon::File: Icons::file(LIST_X + 14, cy, iconColor, p.surface); break;
-    case RowIcon::Wifi: Icons::alpha(iconColor == p.okFg ? ICON_WIFI : ICON_WIFI_OFF, LIST_X + 14, cy, iconColor, p.surface); break;
+    case RowIcon::Bt:   Icons::bluetooth(LST_LEFT + 14, cy, iconColor); break;
+    case RowIcon::Ha:   Icons::alpha(ICON_HA_LOGO, LST_LEFT + 14, cy, iconColor, p.surface); break;
+    case RowIcon::File: Icons::file(LST_LEFT + 14, cy, iconColor, p.surface); break;
+    case RowIcon::Wifi: Icons::alpha(iconColor == p.okFg ? ICON_WIFI : ICON_WIFI_OFF, LST_LEFT + 14, cy, iconColor, p.surface); break;
     }
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BOLD);
     tft.setTextColor(p.text, p.surface);
-    textFit(title, LIST_X + 30, y + 6, chevron ? 166 : 186);
+    textFit(title, LST_LEFT + 30, y + 6, chevron ? 166 : 186);
     tft.setTextFont(2);
     tft.setTextColor(subColor, p.surface);
-    textFit(sub, LIST_X + 30, y + 25, chevron ? 166 : 186);
-    if (chevron) Icons::chevron(LIST_X + LIST_W - 12, cy, p.textFaint);
+    textFit(sub, LST_LEFT + 30, y + 25, chevron ? 166 : 186);
+    if (chevron) Icons::chevron(LST_LEFT + LST_WIDTH - 12, cy, p.textFaint);
 }
 
 String batteryText() {
@@ -459,10 +459,10 @@ void labelRow(int16_t y, const String& left, const String& right, uint16_t right
     tft.setTextFont(2);
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(p.textFaint, p.bg);
-    tft.drawString(left, LIST_X + 4, y + ROW_LABEL / 2 + 1);
+    tft.drawString(left, LST_LEFT + 4, y + ROW_LABEL / 2 + 1);
     tft.setTextDatum(MR_DATUM);
     tft.setTextColor(rightColor, p.bg);
-    tft.drawString(right, LIST_X + LIST_W - 2, y + ROW_LABEL / 2 + 1);
+    tft.drawString(right, LST_LEFT + LST_WIDTH - 2, y + ROW_LABEL / 2 + 1);
 }
 
 String haRowSub() {
@@ -508,11 +508,11 @@ void drawRow(const RowDef& r, int16_t y) {
         card(y, r.h, RowIcon::File, p.ir, "Reload SD card", irStatus, p.textFaint, true);
         break;
     case R_THEME:
-        tft.fillRoundRect(LIST_X, y, LIST_W, r.h, 7, p.surface);
+        tft.fillRoundRect(LST_LEFT, y, LST_WIDTH, r.h, 7, p.surface);
         tft.setFreeFont(FONT_BOLD);
         tft.setTextDatum(ML_DATUM);
         tft.setTextColor(p.text, p.surface);
-        tft.drawString("Theme", LIST_X + 8, y + r.h / 2);
+        tft.drawString("Theme", LST_LEFT + 8, y + r.h / 2);
         segments(70, y + 7, 156, 30, THEME_NAMES, Store::s.theme);
         break;
     case R_PWRLABEL:
@@ -522,7 +522,7 @@ void drawRow(const RowDef& r, int16_t y) {
         tft.setTextFont(2);
         tft.setTextDatum(ML_DATUM);
         tft.setTextColor(p.text, p.bg);
-        tft.drawString(PWR_LABELS[r.arg], LIST_X + 4, y + r.h / 2);
+        tft.drawString(PWR_LABELS[r.arg], LST_LEFT + 4, y + r.h / 2);
         const uint8_t sel = r.arg == 0 ? Store::s.brightness : r.arg == 1 ? Store::s.dimAfter
                           : r.arg == 2 ? Store::s.sleepAfter : Store::s.wifiOff;
         segments(80, y + 2, 148, 30, PWR_OPTS[r.arg], sel);
@@ -554,11 +554,11 @@ void drawRow(const RowDef& r, int16_t y) {
         const int32_t ms = Ha::testResultMs();
         String label = Ha::testing() ? "Testing..." : ms >= 0 ? "Answered in " + String(ms) + " ms"
                      : ms == -2 ? "No answer - tap to retry" : "Test connection";
-        button(LIST_X, y, LIST_W, r.h, p.raised, p.border);
+        button(LST_LEFT, y, LST_WIDTH, r.h, p.raised, p.border);
         tft.setFreeFont(FONT_BOLD);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(ms == -2 ? p.errFg : p.text, p.raised);
-        tft.drawString(label, LIST_X + LIST_W / 2, y + r.h / 2);
+        tft.drawString(label, LST_LEFT + LST_WIDTH / 2, y + r.h / 2);
         break;
     }
     case R_CFG:
@@ -582,22 +582,22 @@ void drawRow(const RowDef& r, int16_t y) {
     }
     case R_ENT: {
         const Ha::Item& it = Ha::item(r.arg);
-        tft.fillRoundRect(LIST_X, y, LIST_W, r.h, 6, p.surface);
+        tft.fillRoundRect(LST_LEFT, y, LST_WIDTH, r.h, 6, p.surface);
         uint16_t bfg, bbg;
         const String badge = entityBadge(r.arg, bfg, bbg);
         tft.setTextFont(2);
         const int16_t bw = tft.textWidth(badge) + 12;
-        tft.fillRoundRect(LIST_X + LIST_W - bw - 6, y + 8, bw, 18, 4, bbg);
+        tft.fillRoundRect(LST_LEFT + LST_WIDTH - bw - 6, y + 8, bw, 18, 4, bbg);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(bfg, bbg);
-        tft.drawString(badge, LIST_X + LIST_W - 6 - bw / 2, y + 17);
-        const int16_t tw = LIST_W - bw - 22;
+        tft.drawString(badge, LST_LEFT + LST_WIDTH - 6 - bw / 2, y + 17);
+        const int16_t tw = LST_WIDTH - bw - 22;
         tft.setTextDatum(TL_DATUM);
         tft.setTextColor(p.text, p.surface);
-        textFit(it.label, LIST_X + 8, y + 3, tw);
+        textFit(it.label, LST_LEFT + 8, y + 3, tw);
         tft.setTextFont(1);
         tft.setTextColor(p.textFaint, p.surface);
-        textFit(it.id, LIST_X + 8, y + 22, tw);
+        textFit(it.id, LST_LEFT + 8, y + 22, tw);
         break;
     }
     }
@@ -605,11 +605,11 @@ void drawRow(const RowDef& r, int16_t y) {
 
 void drawScrollbar() {
     const Palette& p = palette();
-    tft.fillRect(SCREEN_W - 6, LIST_Y, 6, LIST_H, p.bg);
+    tft.fillRect(SCREEN_W - 6, LST_TOP, 6, LST_HEIGHT, p.bg);
     const int16_t total = contentHeight();
-    if (total <= LIST_H) return;
-    const int16_t th = max<int16_t>(20, (int32_t)LIST_H * LIST_H / total);
-    const int16_t ty = LIST_Y + (int32_t)scrollY * (LIST_H - th) / (total - LIST_H);
+    if (total <= LST_HEIGHT) return;
+    const int16_t th = max<int16_t>(20, (int32_t)LST_HEIGHT * LST_HEIGHT / total);
+    const int16_t ty = LST_TOP + (int32_t)scrollY * (LST_HEIGHT - th) / (total - LST_HEIGHT);
     tft.fillRoundRect(SCREEN_W - 5, ty, 3, th, 1, p.border);
 }
 
@@ -617,15 +617,15 @@ void drawList() {
     const Palette& p = palette();
     RowDef rows[16];
     const uint8_t n = buildRows(rows);
-    tft.setViewport(0, LIST_Y, SCREEN_W, LIST_H, false);   // clip to the list
-    int16_t y = LIST_Y - scrollY, prevBottom = LIST_Y;
+    tft.setViewport(0, LST_TOP, SCREEN_W, LST_HEIGHT, false);   // clip to the list
+    int16_t y = LST_TOP - scrollY, prevBottom = LST_TOP;
     for (uint8_t i = 0; i < n; i++) {
         if (y > prevBottom) tft.fillRect(0, prevBottom, SCREEN_W - 6, y - prevBottom, p.bg);
-        if (y + rows[i].h > LIST_Y && y < SCREEN_H) drawRow(rows[i], y);
+        if (y + rows[i].h > LST_TOP && y < SCREEN_H) drawRow(rows[i], y);
         prevBottom = y + rows[i].h;
         y += rows[i].h + GAP;
     }
-    if (prevBottom < SCREEN_H) tft.fillRect(0, max(prevBottom, LIST_Y), SCREEN_W - 6, SCREEN_H - max(prevBottom, LIST_Y), p.bg);
+    if (prevBottom < SCREEN_H) tft.fillRect(0, max(prevBottom, LST_TOP), SCREEN_W - 6, SCREEN_H - max(prevBottom, LST_TOP), p.bg);
     drawScrollbar();
     tft.resetViewport();
 }
@@ -634,10 +634,10 @@ void drawList() {
 void drawRowKind(Row kind) {
     RowDef rows[16];
     const uint8_t n = buildRows(rows);
-    int16_t y = LIST_Y - scrollY;
-    tft.setViewport(0, LIST_Y, SCREEN_W, LIST_H, false);
+    int16_t y = LST_TOP - scrollY;
+    tft.setViewport(0, LST_TOP, SCREEN_W, LST_HEIGHT, false);
     for (uint8_t i = 0; i < n; i++) {
-        if (rows[i].kind == kind && y + rows[i].h > LIST_Y && y < SCREEN_H) drawRow(rows[i], y);
+        if (rows[i].kind == kind && y + rows[i].h > LST_TOP && y < SCREEN_H) drawRow(rows[i], y);
         y += rows[i].h + GAP;
     }
     tft.resetViewport();
@@ -661,16 +661,16 @@ void drawListScreen() {
 
 Target hitList(int16_t x, int16_t y) {
     Target t;
-    if (y < LIST_Y) return t;
+    if (y < LST_TOP) return t;
     RowDef rows[16];
     const uint8_t n = buildRows(rows);
-    const int16_t cy = y - LIST_Y + scrollY;
+    const int16_t cy = y - LST_TOP + scrollY;
     int16_t top = 0;
     for (uint8_t i = 0; i < n; i++) {
         const RowDef& r = rows[i];
         if (cy >= top && cy < top + r.h) {
-            const int16_t sy = LIST_Y + top - scrollY;
-            auto set = [&](Hit h, uint8_t arg) { t.hit = h; t.arg = arg; t.x = LIST_X; t.y = sy; t.w = LIST_W; t.h = r.h; };
+            const int16_t sy = LST_TOP + top - scrollY;
+            auto set = [&](Hit h, uint8_t arg) { t.hit = h; t.arg = arg; t.x = LST_LEFT; t.y = sy; t.w = LST_WIDTH; t.h = r.h; };
             auto seg = [&](Hit h, int16_t sx, int16_t sw) {
                 if (x >= sx && x < sx + sw) set(h, (uint8_t)min(2, (x - sx) * 3 / sw));
             };
@@ -698,7 +698,7 @@ Target hitList(int16_t x, int16_t y) {
 
 bool scrollable() { return screen == Screen::Settings || screen == Screen::HaStatus; }
 
-int16_t scrollMax() { return max<int16_t>(0, contentHeight() - LIST_H); }
+int16_t scrollMax() { return max<int16_t>(0, contentHeight() - LST_HEIGHT); }
 
 void scrollTo(int16_t y) {
     y = constrain(y, 0, scrollMax());
@@ -911,7 +911,7 @@ Target hitTest(int16_t x, int16_t y) {
         return t;
     case Screen::Settings:
     case Screen::HaStatus:
-        if (y < LIST_Y) {
+        if (y < LST_TOP) {
             if (x < 60) set(Hit::Back, 0, PAD, HDR_Y, 40, HDR_H);
             return t;
         }
