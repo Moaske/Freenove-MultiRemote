@@ -239,6 +239,31 @@ constexpr int16_t HOME_HDR_H = 30;
 constexpr int16_t TILE_Y = 38, TILE_W = 114, TILE_H = 68;
 constexpr int16_t BLIND_LABEL_Y = 254, BLIND_Y = 272, BLIND_H = 44;
 
+// Inside a tile: icon 28 px at (8, 8); label from where the icon ends,
+// starting under the state text.
+constexpr int16_t LABEL_X = 40, LABEL_Y = 25, LABEL_W = TILE_W - LABEL_X - 6;
+
+// Split text over two lines of at most maxW pixels in the current font:
+// whole words on the first line where possible; the rest goes on the second.
+void wrap2(const String& text, int16_t maxW, String& l1, String& l2) {
+    l1 = text;
+    l2 = "";
+    if (tft.textWidth(text) <= maxW) return;
+    int cut = -1;
+    for (int i = 0; i < (int)text.length(); i++)
+        if (text[i] == ' ' && tft.textWidth(text.substring(0, i)) <= maxW) cut = i;
+    if (cut < 0) {   // one long word: break it where it no longer fits
+        cut = text.length();
+        while (cut > 1 && tft.textWidth(text.substring(0, cut)) > maxW) cut--;
+        l1 = text.substring(0, cut);
+        l2 = text.substring(cut);
+    } else {
+        l1 = text.substring(0, cut);
+        l2 = text.substring(cut + 1);
+    }
+    l2.trim();
+}
+
 int16_t tileX(uint8_t i) { return PAD + (i % 2) * (TILE_W + GAP); }
 int16_t tileY(uint8_t i) { return TILE_Y + (i / 2) * (TILE_H + GAP); }
 
@@ -297,10 +322,15 @@ void drawTile(uint8_t i, bool pressed) {
     tft.setTextColor(on ? p.onFg : p.textFaint, fill);
     tft.drawString(st, x + TILE_W - 8, y + 7);
 
-    tft.setFreeFont(FONT_BOLD);
-    tft.setTextDatum(BL_DATUM);
+    // The label: right of the icon, under the state, in the small font,
+    // wrapped over two lines.
+    tft.setTextFont(2);
+    tft.setTextDatum(TL_DATUM);
     tft.setTextColor(on ? p.text : (known ? p.textDim : p.textFaint), fill);
-    textFit(it.label, x + 8, y + TILE_H - 8, TILE_W - 16);
+    String l1, l2;
+    wrap2(it.label, LABEL_W, l1, l2);
+    tft.drawString(l1, x + LABEL_X, y + LABEL_Y);
+    if (l2.length()) textFit(l2, x + LABEL_X, y + LABEL_Y + 16, LABEL_W);
 }
 
 String blindText() {
