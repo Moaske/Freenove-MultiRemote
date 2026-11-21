@@ -99,7 +99,7 @@ void snapshot() {
     for (uint8_t i = 0; i <= MAX_SWITCHES; i++) s_cfg.ids[i] = s_items[i].id;
 }
 
-Client& client() {
+WiFiClient& client() {   // HTTPClient::begin() wants a WiFiClient (the TLS one is one too)
     if (s_cfg.url.startsWith("https")) {
         s_tls.setInsecure();   // a home server usually has no public certificate
         return s_tls;
